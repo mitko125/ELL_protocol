@@ -1,0 +1,139 @@
+menu "Hardware Devices Configuration"
+
+    config STATUS_LEDS_GPIO
+        int "Status Leds pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 48
+        help
+            GPIO number (IOxx) the RMT signal for the addressable LEDS.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used to RMT.
+
+    config BUTTON_GPIO
+        int "Button pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 0
+        help
+            GPIO number for button. Default BOOT button on most boards.
+
+    config PRG1_GPIO
+        int "PRG1 pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 47
+        help
+            GPIO number for PRG1 jumper.
+
+    config PRG2_GPIO
+        int "PRG2 pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 3
+        help
+            GPIO number for PRG2 jumper.
+
+    config LCD_E_GPIO
+        int "LCD-E pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 5
+        help
+            GPIO number for LCD-E pin.
+
+    menu "RS485 UARTs"
+    
+        config RS485_UART1_TXD
+            int "RS485 UART1 (left) Tx pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 17
+            help
+                GPIO number for UART TX pin. See UART documentation for more information
+                about available pin numbers for UART.
+        config RS485_UART1_RXD
+            int "RS485 UART1 (left) Rx pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 18
+            help
+                GPIO number for UART RX pin. See UART documentation for more information
+                about available pin numbers for UART.
+        config RS485_UART1_RTS
+            int "RS485 UART1 (left) RTS pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 10
+            help
+                GPIO number for UART RTS pin. This pin is connected to
+                ~RE/DE pin of RS485 transceiver to switch direction.
+                See UART documentation for more information about available pin
+                numbers for UART.
+
+        config RS485_UART2_TXD
+            int "RS485 UART2 (right) Tx pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 1
+            help
+                GPIO number for UART TX pin. See UART documentation for more information
+                about available pin numbers for UART.
+        config RS485_UART2_RXD
+            int "RS485 UART2 (right) Rx pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 2
+            help
+                GPIO number for UART RX pin. See UART documentation for more information
+                about available pin numbers for UART.
+        config RS485_UART2_RTS
+            int "RS485 UART2 (right) RTS pin number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 46
+            help
+                GPIO number for UART RTS pin. This pin is connected to
+                ~RE/DE pin of RS485 transceiver to switch direction.
+                See UART documentation for more information about available pin
+                numbers for UART.
+
+    endmenu # "RS485 UARTs"
+
+    menu "i2c"
+
+        config SDA_GPIO
+            int "SDA GPIO number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 9
+            help
+                GPIO number SDA.
+     
+        config SCL_GPIO
+            int "SCL GPIO number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 8
+            help
+                GPIO number SCL.
+
+        config I2CDEV_TIMEOUT
+            int "i2c transaction timeout, milliseconds"
+            default 100
+            range 10 5000
+            
+    endmenu # "i2c"
+
+    menu "SD card"
+
+        config SD_CARD_CLK
+            int "SD card CLK GPIO number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 12
+        config SD_CARD_CMD
+            int "SD card CMD GPIO number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 11
+        config SD_CARD_D0
+            int "SD card D0 GPIO number"
+            range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+            default 13
+        config SD_CARD_CD
+            int "SD card CD GPIO number"
+            range -1 ENV_GPIO_OUT_RANGE_MAX
+            default 14
+            help
+                GPIO pin number for SD card presence.
+
+    endmenu # "SD card"
+
+    rsource "Kconfig_Inthernet"
+
+endmenu # "Hardware Devices Configuration" 

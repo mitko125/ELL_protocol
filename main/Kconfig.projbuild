@@ -1,0 +1,11 @@
+#
+#	Global Helperrs Setings
+#
+
+orsource "$IDF_PATH/examples/common_components/env_caps/$IDF_TARGET/Kconfig.env_caps"
+
+menu "Controller Configuration"
+    
+    rsource "Kconfig"
+
+endmenu # "Controller Configuration"
