@@ -6,6 +6,7 @@
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "driver/uart.h"
+#include "hal/uart_hal.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
@@ -15,7 +16,7 @@
 
 #include "protocol_ELL_defs.h"
 
-static const char *TAG = "ELL_slave";
+static const char *TAG = "Slave";
 
 #define LEFT_UART 1
 
@@ -124,7 +125,14 @@ void out_buf(uint8_t broj)
             // UDR = 0xff;
             flag_first = 0;
             // с един ненужен 0xff за забавяне на данните
-            uart_write_bytes(SLAVE_UART_PORT, buf_send, broj + 1);
+            // uart_write_bytes(SLAVE_UART_PORT, buf_send, broj + 1);
+
+            ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_UART));
+            uart_write_bytes(SLAVE_UART_PORT, buf_send, 1);
+            uart_wait_tx_done(SLAVE_UART_PORT, portMAX_DELAY);
+            ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_RS485_HALF_DUPLEX));
+            goto first;
+
         }
     } else {
 first:
@@ -197,7 +205,7 @@ static void init_fun(void)
 #endif
 
 
-    PIS |= 0x20;    // !!! БЕЗ ТОВА НЕ ТРЪГВА Т.Е. НЕ ОЩЕ НЕ СЪМ ГОТОВ С ПАУЗАТА ПРИ СМЯНА НА ПОСОКАТА
+    // PIS |= 0x20;    // !!! БЕЗ ТОВА НЕ ТРЪГВА Т.Е. НЕ ОЩЕ НЕ СЪМ ГОТОВ С ПАУЗАТА ПРИ СМЯНА НА ПОСОКАТА
 
 
     if (PIS & 0x80)
@@ -456,24 +464,114 @@ int main(void)
 
 
 
+static QueueHandle_t uart0_queue;
+
+static void uart_event_task(void *pvParameters)
+{
+    uart_event_t event;
+    // size_t buffered_size;
+    uint8_t* dtmp = (uint8_t*) malloc(BUF_SIZE);
+    for (;;) {
+        //Waiting for UART event.
+        if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
+
+            gpio_set_level(TOGLE_PIN1, !gpio_get_level(TOGLE_PIN1));
+
+            // bzero(dtmp, BUF_SIZE);
+            // ESP_LOGI(TAG, "uart[%d] event:", SLAVE_UART_PORT);
+            switch (event.type) {
+            //Event of UART receiving data
+            /*We'd better handler data event fast, there would be much more data events than
+            other types of events. If we take too much time on data event, the queue might
+            be full.*/
+            case UART_DATA:
+                // ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+
+                uart_read_bytes(SLAVE_UART_PORT, dtmp, event.size, portMAX_DELAY);
+                for(int i = 0; i < event.size; i++)
+                    if (dtmp[i] != 0xff)
+                        read_byte(dtmp[i]);
+
+                // ESP_LOGI(TAG, "[DATA EVT]:");
+                // uart_write_bytes(SLAVE_UART_PORT, (const char*) dtmp, event.size);
+                break;
+            //Event of HW FIFO overflow detected
+            case UART_FIFO_OVF:
+                ESP_LOGI(TAG, "hw fifo overflow");
+                // If fifo overflow happened, you should consider adding flow control for your application.
+                // The ISR has already reset the rx FIFO,
+                // As an example, we directly flush the rx buffer here in order to read more data.
+                uart_flush_input(SLAVE_UART_PORT);
+                xQueueReset(uart0_queue);
+                break;
+            //Event of UART ring buffer full
+            case UART_BUFFER_FULL:
+                ESP_LOGI(TAG, "ring buffer full");
+                // If buffer full happened, you should consider increasing your buffer size
+                // As an example, we directly flush the rx buffer here in order to read more data.
+                uart_flush_input(SLAVE_UART_PORT);
+                xQueueReset(uart0_queue);
+                break;
+            //Event of UART RX break detected
+            case UART_BREAK:
+                ESP_LOGI(TAG, "uart rx break");
+                break;
+            //Event of UART parity check error
+            case UART_PARITY_ERR:
+                ESP_LOGI(TAG, "uart parity error");
+                break;
+            //Event of UART frame error
+            case UART_FRAME_ERR:
+                ESP_LOGI(TAG, "uart frame error");
+                break;
+            //UART_PATTERN_DET
+            // case UART_PATTERN_DET:
+            //     uart_get_buffered_data_len(SLAVE_UART_PORT, &buffered_size);
+            //     int pos = uart_pattern_pop_pos(SLAVE_UART_PORT);
+            //     ESP_LOGI(TAG, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
+            //     if (pos == -1) {
+            //         // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
+            //         // record the position. We should set a larger queue size.
+            //         // As an example, we directly flush the rx buffer here.
+            //         uart_flush_input(SLAVE_UART_PORT);
+            //     } else {
+            //         uart_read_bytes(SLAVE_UART_PORT, dtmp, pos, 100 / portTICK_PERIOD_MS);
+            //         uint8_t pat[PATTERN_CHR_NUM + 1];
+            //         memset(pat, 0, sizeof(pat));
+            //         uart_read_bytes(SLAVE_UART_PORT, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
+            //         ESP_LOGI(TAG, "read data: %s", dtmp);
+            //         ESP_LOGI(TAG, "read pat : %s", pat);
+            //     }
+            //     break;
+            //Others
+            default:
+                ESP_LOGI(TAG, "uart event type: %d", event.type);
+                break;
+            }
+        }
+    }
+    free(dtmp);
+    dtmp = NULL;
+    vTaskDelete(NULL);
+}
 
 void slave_task(void *arg)
 {
+
+    init_fun();
+
     uart_config_t uart_config = {
         .baud_rate = BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .rx_flow_ctrl_thresh = 122,
         .source_clk = UART_SCLK_DEFAULT,
     };
 
     ESP_LOGI(TAG, "Start RS485 application test and configure UART.");
 
-    // Install UART driver (we don't need an event queue here)
-    // In this example we don't even use a buffer for sending data.
-    ESP_ERROR_CHECK(uart_driver_install(SLAVE_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 0, NULL, ESP_INTR_FLAG_SHARED));
+    ESP_ERROR_CHECK(uart_driver_install(SLAVE_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart0_queue, 0));
 
     // Configure UART parameters
     ESP_ERROR_CHECK(uart_param_config(SLAVE_UART_PORT, &uart_config));
@@ -486,39 +584,33 @@ void slave_task(void *arg)
     // Set RS485 half duplex mode
     ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_RS485_HALF_DUPLEX));
 
-    // Set read timeout of UART TOUT feature
-    ESP_ERROR_CHECK(uart_set_rx_timeout(SLAVE_UART_PORT, ECHO_READ_TOUT));
-
-    // Allocate buffers for UART
-    uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
-
     ESP_LOGI(TAG, "UART start recieve loop.\r");
 
     uart_flush_input(SLAVE_UART_PORT);
 
+    //Reset the pattern queue length to record at most 20 pattern positions.
+    uart_pattern_queue_reset(SLAVE_UART_PORT, 20);
 
+    //Create a task to handler UART event from ISR
+    xTaskCreate(uart_event_task, "uart_event_task", 2 * 4096, NULL, 22, NULL);
 
+    uart_intr_config_t uart_intr = {
+        .intr_enable_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_TXFIFO_EMPTY,
+        .rxfifo_full_thresh = 1,
+        .rx_timeout_thresh = 1,
+        .txfifo_empty_intr_thresh = 1,
+    };
+    ESP_ERROR_CHECK(uart_intr_config(SLAVE_UART_PORT, &uart_intr));
 
+    // ESP_ERROR_CHECK(uart_enable_intr_mask(SLAVE_UART_PORT, UART_INTR_TX_DONE | 
+    //     UART_INTR_TXFIFO_EMPTY |
+    //     UART_INTR_RXFIFO_TOUT));
 
-    init_fun();
+    // uart_set_always_rx_timeout(SLAVE_UART_PORT, true);
 
-    while (1)
-    {
-        int len = uart_read_bytes(SLAVE_UART_PORT, data, 1, 0);
+    // while (1) {
+    //     vTaskDelay(portMAX_DELAY);
+    // }
 
-        if (len > 0) {
-            // ESP_LOGI(TAG, "Received %u bytes:", len);
-
-            // printf("[ ");
-            for (int i = 0; i < len; i++) {
-                printf("0x%.2X", (uint8_t)data[i]);
-            }
-            printf("\n");
-
-            for (int i = 0; i < len; i++)
-                if (data[i] != 0xff)
-                        read_byte(data[i]);
-        }
-    }
     vTaskDelete(NULL);
 }
