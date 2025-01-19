@@ -69,11 +69,28 @@ void master_task(void *arg)
 
     ESP_LOGI(TAG, "UART start recieve loop.");
 
-// I (1690) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
-    int64_t time_master = esp_timer_get_time() + 1000 * 1000;
+    TickType_t xLastWakeTime;
+    const TickType_t xFrequency = 1;
+    BaseType_t xWasDelayed;
+    xLastWakeTime = xTaskGetTickCount ();
+
     while (1) {
-        vTaskDelay(1);
-        int len = uart_read_bytes(MASTER_UART_PORT, data, BUF_SIZE, 1);
+        
+        xWasDelayed = xTaskDelayUntil( &xLastWakeTime, xFrequency );
+        // Извършете действие тук. Стойността xWasDelayed може да се използва за определяне
+        // дали е пропуснат краен срок, ако кодът тук отне твърде много време.
+        if (!xWasDelayed)
+            ESP_LOGE(TAG, "Time Overflow");
+
+        gpio_set_level(TOGLE_PIN2, !gpio_get_level(TOGLE_PIN2));
+
+        const char command = COMAND_INP;
+        uart_write_bytes(MASTER_UART_PORT, &command, 1);     
+        ESP_ERROR_CHECK(uart_wait_tx_done(MASTER_UART_PORT, portMAX_DELAY));
+
+        gpio_set_level(TOGLE_PIN2, !gpio_get_level(TOGLE_PIN2));
+
+        int len = uart_read_bytes(MASTER_UART_PORT, data, BUF_SIZE, 0);
         if (len > 0) {
             // ESP_LOGI(TAG, "Received %u bytes:", len);
 
@@ -83,17 +100,6 @@ void master_task(void *arg)
             // }
             // printf("} \n");
         }
-        
-
-        if (time_master <= esp_timer_get_time()) {
-            time_master = esp_timer_get_time() + 10 * 1000;
-            char d_send[40];
-            d_send[0] = COMAND_INP;
-            gpio_set_level(TOGLE_PIN2, !gpio_get_level(TOGLE_PIN2));
-            uart_write_bytes(MASTER_UART_PORT, d_send, 1);     
-            ESP_ERROR_CHECK(uart_wait_tx_done(MASTER_UART_PORT, portMAX_DELAY));
-            gpio_set_level(TOGLE_PIN2, !gpio_get_level(TOGLE_PIN2));
-        } 
     }
     vTaskDelete(NULL);
 }
