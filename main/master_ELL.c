@@ -15,7 +15,7 @@
 
 #include "protocol_ELL_defs.h"
 
-static const char *TAG = "Master";
+static const char *TAG = "ELL_master";
 
 #define MASTER_UART_PORT UART_NUM_2
 
@@ -67,7 +67,7 @@ void master_task(void *arg)
      // Allocate buffers for UART
     uint8_t* data = (uint8_t*) malloc(BUF_SIZE);
 
-    ESP_LOGI(TAG, "UART start recieve loop.\r");
+    ESP_LOGI(TAG, "UART start recieve loop.");
 
 // I (1690) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
     int64_t time_master = esp_timer_get_time() + 1000 * 1000;

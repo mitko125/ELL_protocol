@@ -15,7 +15,7 @@
 
 #include "protocol_ELL_defs.h"
 
-extern void slave_task(void *arg);
+extern void slave_main(void *arg);
 extern void master_task(void *arg);
 
 void app_main(void)
@@ -27,7 +27,7 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(gpio_config(&gpio_conf));
 
-    xTaskCreate(slave_task, "slave_task", 2 * 4096, NULL, 10, NULL);
+    xTaskCreate(slave_main, "slave_main", 2 * 4096, NULL, 4, NULL);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     xTaskCreate(master_task, "master_task", 2 * 4096, NULL, 10, NULL);
 }

@@ -16,7 +16,7 @@
 
 #include "protocol_ELL_defs.h"
 
-static const char *TAG = "Slave";
+static const char *TAG = "ELL_slave";
 
 #define LEFT_UART 1
 
@@ -34,22 +34,6 @@ static const char *TAG = "Slave";
 
 #define BUF_SIZE (128)
 
-// Timeout threshold for UART = number of symbols (~10 tics) with unchanged state on receive pin
-#define ECHO_READ_TOUT (3) // 3.5T * 8 = 28 ticks, TOUT=3 -> ~24..33 ticks
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #define OUT_COU 2 // брой осмици релейни изходи
 #define INP_COU 1 // брой осмици цифрови входове
 
@@ -65,7 +49,6 @@ static uint8_t number_out, number_inp;
 static uint8_t cou, cou_bufer, cou_broj, cou_crc;
 static uint8_t ack_bufer;
 static uint8_t time_wait, data_time_wait;
-static uint8_t *pointer_out, cou_out;
 static uint8_t flag_first, flag_set_relay;
 static uint8_t time_wait_inp, data_time_wait_inp;
 static uint8_t old_inp[INP_COU];
@@ -94,24 +77,6 @@ static void set_relay(void) // задейства релетата
     }
 }
 
-// прекъсване в AVR ако шифтрегистъра на uart е празен
-// реализация в AVR засега е изпълнено коствено в ESP32
-void UART_TX_vect(void)
-{
-    // set_transmit();
-    if (cou_out) {
-        // UDR = *pointer_out++;
-        cou_out--;
-    } else {
-        // set_reciv();
-        if (flag_set_relay) {
-            set_relay();
-            flag_set_relay = 0;
-        }
-        // UCR &= 0xbf;
-    }
-}
-
 void out_buf(uint8_t broj)
 {
     uint8_t buf_send[1 + sizeof(char_buf)];
@@ -122,11 +87,8 @@ void out_buf(uint8_t broj)
         if (flag_first == 0) {
             goto first;
         } else {
-            // UDR = 0xff;
             flag_first = 0;
             // с един ненужен 0xff за забавяне на данните
-            // uart_write_bytes(SLAVE_UART_PORT, buf_send, broj + 1);
-
             ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_UART));
             uart_write_bytes(SLAVE_UART_PORT, buf_send, 1);
             uart_wait_tx_done(SLAVE_UART_PORT, portMAX_DELAY);
@@ -137,42 +99,19 @@ void out_buf(uint8_t broj)
     } else {
 first:
         flag_first = 0;
-        // set_transmit();
-        // UDR = *pointer_out++;
-        cou_out--;
         // баз един ненужен 0xff за забавяне на данните
         uart_write_bytes(SLAVE_UART_PORT, buf_send + 1, broj);
     }
     uart_wait_tx_done(SLAVE_UART_PORT, portMAX_DELAY);
-    cou_out = 0;
     if (flag_set_relay) {
         set_relay();
         flag_set_relay = 0;
     }
-
-// реализация в AVR
-//     pointer_out = char_buf;
-//     cou_out = broj;
-//     if ((PIS & 0x20) == 0) {
-//         if (flag_first == 0) {
-//             goto first;
-//         } else {
-//             // UDR = 0xff;
-//             flag_first = 0;
-//         }
-//     } else {
-// first:
-//         flag_first = 0;
-//         // set_transmit();
-//         // UDR = *pointer_out++;
-//         cou_out--;
-//     }
-//     // UCR |= 0x40;
 }
 
 static void reset_relay(void) // нулира релетата
 {
-    ESP_LOGE(TAG, "reset_relay");
+    ;
 }
 
 static void read_inputs(void) // прочита цифровите входове във временен буфер и отговаря с него
@@ -189,8 +128,12 @@ static void read_inputs(void) // прочита цифровите входов�
     }
 }
 
+static void uart_init(void);
+
 static void init_fun(void)
 {
+    uart_init();
+
     reset_relay();
 
     flag_first = flag_set_relay = 0;
@@ -200,13 +143,11 @@ static void init_fun(void)
 
     PIS = 0;
 
+    // PIS |= 0x20;    // !!! за тестове без пауза с един ненужен 0xff за забавяне на данните
+
 #if BAUD_RATE == 115200
     PIS |= 0x02;    // за демо
 #endif
-
-
-    // PIS |= 0x20;    // !!! БЕЗ ТОВА НЕ ТРЪГВА Т.Е. НЕ ОЩЕ НЕ СЪМ ГОТОВ С ПАУЗАТА ПРИ СМЯНА НА ПОСОКАТА
-
 
     if (PIS & 0x80)
         number_out += 16;
@@ -266,10 +207,6 @@ static void ack_relay(void) // извежда ACK,NACK за релейните �
             ack_bufer = ACK_HIGH;
             if (flag_set_relay == 0)
                 set_relay();
-            //      printf("\n\rRelay OK  ");
-            //      for(c=0;c<OUT_COU;c++)
-            //	printf("%.2X",bufer[c]);
-            //      printf("\n\r");
         } else { // грешка при релета
             ESP_LOGE(TAG, "Relay ERR");
         }
@@ -381,7 +318,7 @@ static void read_byte(uint8_t c) // за четене данни от прото
                 } else if (position == TIMING) { // crc за тайминг
                     if (crc == buf_crc) {
                         time_wait = data_time_wait = cou;
-                        //	      printf("’Ђ‰Њ€Ќѓ %d\n\r",cou);
+                        //	      printf("TIMING %d\n\r",cou);
                     } else {
                         flag_first = 1;
                         char_buf[0] = NAK;
@@ -404,40 +341,43 @@ static void read_byte(uint8_t c) // за четене данни от прото
     }
 }
 
-// прекъсване на 1mS
-// реализация в AVR засега не е изпълнено в ESP32
-// ISR(TIMER0_OVF_vect)
-// {
-//     uint8_t inp, chang;
-
-//     TCNT0 = MS;
-
-//     if (time_wait)
-//         time_wait--;
-//     if (data_time_wait_inp)
-//     {
-//         if ((--time_wait_inp) == 0)
-//         {
-//             time_wait_inp = data_time_wait_inp;
-//             inp = get_inp();
-//             chang = old_inp[0] ^ inp;
-//             input_bufer[0] = (input_bufer[0] & chang) | (inp & (~chang));
-//             old_inp[0] = inp;
-//         }
-//     }
-// }
-
-// оригиналния main от AVR
-// реализация в AVR засега не е изпълнено в ESP32
-int main(void)
+// оригиналния main от AVR преправен за ESP32
+void slave_main(void *arg)
 {
     init_fun();
+
+    uint32_t old_time = esp_log_timestamp();
+
     while (1) {
+        
+        // вместо реализация в AVR прекъсване на 1mS
+        uint32_t new_time = esp_log_timestamp();
+        for (int i = new_time - old_time; i; i--) {
+            if (time_wait)
+                time_wait--;
+            if (data_time_wait_inp) {
+                if ((--time_wait_inp) == 0) {
+                    // цифрова филтрация на входовете, никога не ни е трябвала
+                    // uint8_t inp, chang;
+                    // time_wait_inp = data_time_wait_inp;
+                    // inp = get_inp();
+                    // chang = old_inp[0] ^ inp;
+                    // input_bufer[0] = (input_bufer[0] & chang) | (inp & (~chang));
+                    // old_inp[0] = inp;
+                }
+            }
+        }
+        old_time = new_time;
+
+        vTaskDelay(1);
+
 #if OUT_COU != 0
         if (time_wait == 0) { // нулира релейните изходи при timewait
             reset_relay();
-            if (ack_bufer == ACK_HIGH)
+            if (ack_bufer == ACK_HIGH) {
                 ack_bufer = ACK_HIGH | 0x01;
+                ESP_LOGE(TAG, "reset_relay");
+            }
             time_wait = data_time_wait;
         }
 #else
@@ -451,115 +391,66 @@ int main(void)
         resolver_SPI();
 #endif
     }
-    return (0);
+
+    vTaskDelete(NULL);
 }
 
-
-
-
-
-
-
-
-
-
-
 static QueueHandle_t uart0_queue;
+static uint8_t dtmp[BUF_SIZE];
 
 static void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
-    // size_t buffered_size;
-    uint8_t* dtmp = (uint8_t*) malloc(BUF_SIZE);
+
     for (;;) {
         //Waiting for UART event.
         if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
 
             gpio_set_level(TOGLE_PIN1, !gpio_get_level(TOGLE_PIN1));
 
-            // bzero(dtmp, BUF_SIZE);
-            // ESP_LOGI(TAG, "uart[%d] event:", SLAVE_UART_PORT);
             switch (event.type) {
-            //Event of UART receiving data
-            /*We'd better handler data event fast, there would be much more data events than
-            other types of events. If we take too much time on data event, the queue might
-            be full.*/
             case UART_DATA:
-                // ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
-
                 uart_read_bytes(SLAVE_UART_PORT, dtmp, event.size, portMAX_DELAY);
                 for(int i = 0; i < event.size; i++)
                     if (dtmp[i] != 0xff)
                         read_byte(dtmp[i]);
-
-                // ESP_LOGI(TAG, "[DATA EVT]:");
-                // uart_write_bytes(SLAVE_UART_PORT, (const char*) dtmp, event.size);
                 break;
             //Event of HW FIFO overflow detected
             case UART_FIFO_OVF:
-                ESP_LOGI(TAG, "hw fifo overflow");
-                // If fifo overflow happened, you should consider adding flow control for your application.
-                // The ISR has already reset the rx FIFO,
-                // As an example, we directly flush the rx buffer here in order to read more data.
+                ESP_LOGE(TAG, "hw fifo overflow");
                 uart_flush_input(SLAVE_UART_PORT);
                 xQueueReset(uart0_queue);
                 break;
             //Event of UART ring buffer full
             case UART_BUFFER_FULL:
-                ESP_LOGI(TAG, "ring buffer full");
-                // If buffer full happened, you should consider increasing your buffer size
-                // As an example, we directly flush the rx buffer here in order to read more data.
+                ESP_LOGE(TAG, "ring buffer full");
                 uart_flush_input(SLAVE_UART_PORT);
                 xQueueReset(uart0_queue);
                 break;
             //Event of UART RX break detected
             case UART_BREAK:
-                ESP_LOGI(TAG, "uart rx break");
+                ESP_LOGW(TAG, "uart rx break");
                 break;
             //Event of UART parity check error
             case UART_PARITY_ERR:
-                ESP_LOGI(TAG, "uart parity error");
+                ESP_LOGE(TAG, "uart parity error");
                 break;
             //Event of UART frame error
             case UART_FRAME_ERR:
-                ESP_LOGI(TAG, "uart frame error");
+                ESP_LOGE(TAG, "uart frame error");
                 break;
-            //UART_PATTERN_DET
-            // case UART_PATTERN_DET:
-            //     uart_get_buffered_data_len(SLAVE_UART_PORT, &buffered_size);
-            //     int pos = uart_pattern_pop_pos(SLAVE_UART_PORT);
-            //     ESP_LOGI(TAG, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
-            //     if (pos == -1) {
-            //         // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
-            //         // record the position. We should set a larger queue size.
-            //         // As an example, we directly flush the rx buffer here.
-            //         uart_flush_input(SLAVE_UART_PORT);
-            //     } else {
-            //         uart_read_bytes(SLAVE_UART_PORT, dtmp, pos, 100 / portTICK_PERIOD_MS);
-            //         uint8_t pat[PATTERN_CHR_NUM + 1];
-            //         memset(pat, 0, sizeof(pat));
-            //         uart_read_bytes(SLAVE_UART_PORT, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
-            //         ESP_LOGI(TAG, "read data: %s", dtmp);
-            //         ESP_LOGI(TAG, "read pat : %s", pat);
-            //     }
-            //     break;
             //Others
             default:
-                ESP_LOGI(TAG, "uart event type: %d", event.type);
+                ESP_LOGW(TAG, "uart event type: %d", event.type);
                 break;
             }
         }
     }
-    free(dtmp);
-    dtmp = NULL;
     vTaskDelete(NULL);
 }
 
-void slave_task(void *arg)
+static void uart_init(void)
 {
-
-    init_fun();
-
     uart_config_t uart_config = {
         .baud_rate = BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
@@ -569,14 +460,12 @@ void slave_task(void *arg)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    ESP_LOGI(TAG, "Start RS485 application test and configure UART.");
+    ESP_LOGI(TAG, "Start RS485 and configure UART.");
 
     ESP_ERROR_CHECK(uart_driver_install(SLAVE_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart0_queue, 0));
 
     // Configure UART parameters
     ESP_ERROR_CHECK(uart_param_config(SLAVE_UART_PORT, &uart_config));
-
-    ESP_LOGI(TAG, "UART set pins, mode and install driver.");
 
     // Set UART pins as per KConfig settings
     ESP_ERROR_CHECK(uart_set_pin(SLAVE_UART_PORT, SLAVE_TXD, SLAVE_RXD, SLAVE_RTS, UART_PIN_NO_CHANGE));
@@ -584,7 +473,7 @@ void slave_task(void *arg)
     // Set RS485 half duplex mode
     ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_RS485_HALF_DUPLEX));
 
-    ESP_LOGI(TAG, "UART start recieve loop.\r");
+    ESP_LOGI(TAG, "UART start recieve loop.");
 
     uart_flush_input(SLAVE_UART_PORT);
 
@@ -592,7 +481,7 @@ void slave_task(void *arg)
     uart_pattern_queue_reset(SLAVE_UART_PORT, 20);
 
     //Create a task to handler UART event from ISR
-    xTaskCreate(uart_event_task, "uart_event_task", 2 * 4096, NULL, 22, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 2 * 4096, NULL, 11, NULL);
 
     uart_intr_config_t uart_intr = {
         .intr_enable_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_TXFIFO_EMPTY,
@@ -602,15 +491,14 @@ void slave_task(void *arg)
     };
     ESP_ERROR_CHECK(uart_intr_config(SLAVE_UART_PORT, &uart_intr));
 
+    // Enable UART RX FIFO full threshold and timeout interrupts
+    // ESP_ERROR_CHECK(uart_enable_rx_intr(SLAVE_UART_PORT));
+
+    // ESP_ERROR_CHECK(uart_enable_tx_intr(SLAVE_UART_PORT, 1, 1));
+
     // ESP_ERROR_CHECK(uart_enable_intr_mask(SLAVE_UART_PORT, UART_INTR_TX_DONE | 
     //     UART_INTR_TXFIFO_EMPTY |
     //     UART_INTR_RXFIFO_TOUT));
 
     // uart_set_always_rx_timeout(SLAVE_UART_PORT, true);
-
-    // while (1) {
-    //     vTaskDelay(portMAX_DELAY);
-    // }
-
-    vTaskDelete(NULL);
 }
