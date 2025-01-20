@@ -141,10 +141,10 @@ static void init_fun(void)
 
     flag_first = flag_set_relay = 0;
     
-    number_out = NUMBER_OUT;
-    number_inp = NUMBER_INP;
+    number_out = NUMBER_OUT;    // !!! настройват се с джъмпери
+    number_inp = NUMBER_INP;    // !!! настройват се с джъмпери
 
-    PIS = 0;
+    PIS = 0;        // !!! настройват се с джъмпери
 
     // PIS |= 0x20;    // !!! за тестове без пауза с един ненужен 0xff за забавяне на данните
 

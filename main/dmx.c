@@ -1,15 +1,5 @@
-// #pragma codeseg(RCODE)
-// тук останаха само прототипи
 #define DMX
 
-#include "04100611.h"
-#include <avr/interrupt.h>
-/*#include <def.h>
-#include <sub.h>
-#include <var.h>
-#include <key.h>
-#include <stdio.h>
-#include <string.h>*/
 #include "dmx_prog.h"
 #include "lader.h"
 
@@ -28,25 +18,25 @@
 #else
 #define SIZE_DMX 0x10
 #endif
-unsigned char bufer_inputs[SIZE_DMX]; // буфери за входове и изходи (DMX_xxxx.s07)
-unsigned char bufer_outputs[SIZE_DMX];
-unsigned char buf_o_spi[0x10];
-unsigned char buf_i_spi[0x10];
+uint8_t bufer_inputs[SIZE_DMX]; // буфери за входове и изходи (DMX_xxxx.s07)
+uint8_t bufer_outputs[SIZE_DMX];
+uint8_t buf_o_spi[0x10];
+uint8_t buf_i_spi[0x10];
 
-unsigned char cou_inp;
-unsigned char cou_out;           // брой входове и изходи
-unsigned char err_prot_in_start; /*грешката в протокола е при стартирането му*/
-unsigned char f_err_inputs;      /*флаг за грешка във входовете	*/
-unsigned char disp_err_inputs;   /*вида на грешката		*/
-unsigned char f_err_outputs;     /*флаг за грешка в изходите	*/
-unsigned char disp_err_outputs;  /*вида на грешката		*/
-unsigned char disp_err_cou_inputs;
-unsigned char disp_err_cou_outputs;
-static unsigned char c_err_inp;
-static unsigned char c_err_out;
-static unsigned char f_start_time_out;
-static unsigned char int_err_rs485;
-static unsigned char noi_clr_err_prot_in_start;
+uint8_t cou_inp;
+uint8_t cou_out;           // брой входове и изходи
+uint8_t err_prot_in_start; /*грешката в протокола е при стартирането му*/
+uint8_t f_err_inputs;      /*флаг за грешка във входовете	*/
+uint8_t disp_err_inputs;   /*вида на грешката		*/
+uint8_t f_err_outputs;     /*флаг за грешка в изходите	*/
+uint8_t disp_err_outputs;  /*вида на грешката		*/
+uint8_t disp_err_cou_inputs;
+uint8_t disp_err_cou_outputs;
+static uint8_t c_err_inp;
+static uint8_t c_err_out;
+static uint8_t f_start_time_out;
+static uint8_t int_err_rs485;
+static uint8_t noi_clr_err_prot_in_start;
 
 void start_input(void);
 void start_outputs(void);
@@ -64,35 +54,16 @@ typedef enum
 
 static volatile POSITION position;
 
-static unsigned char char_bufer[100];
-static unsigned char crc, cou, cou_wait;
-static unsigned char fl_end_tr;
-static unsigned char *bufer_point;
+static uint8_t char_bufer[100];
+static uint8_t crc, cou, cou_wait;
+static uint8_t fl_end_tr;
+static uint8_t *bufer_point;
 
-#define set_transmit()                      \
-    {                                       \
-        register unsigned char sreg = SREG; \
-        cli();                              \
-        PORTE |= 0x0c;                      \
-        SREG = sreg;                        \
-    }
-#define set_reciv()                         \
-    {                                       \
-        register unsigned char sreg = SREG; \
-        cli();                              \
-        PORTE &= ~0x0c;                     \
-        SREG = sreg;                        \
-    }
-#define rs_e_int_transmit() (UCSR0B |= (_BV(TXCIE0)))
-#define rs_e_int_reciv() (UCSR0B |= (_BV(RXCIE0)))
-#define rs_d_interrupt() (UCSR0B &= ~(_BV(TXCIE0) | _BV(RXCIE0)))
-
-void dmx_init(unsigned int boude)
+void dmx_init(uint32_t boude)
 {
     cou_inp = def_inp;
     cou_out = def_out;
-    if (cou_inp || cou_out)
-    {
+    if (cou_inp || cou_out) {
         PORTE |= 0b00000010;
         DDRE |= 0b00001110;
 
@@ -101,17 +72,7 @@ void dmx_init(unsigned int boude)
         UBRR0L = boude;
         UCSR0B = _BV(TXEN0) | _BV(RXEN0); // Enable RX & TX
     }
-    {
-        register unsigned char i;
-        for (i = 0; i < SIZE_DMX; i++)
-            bufer_outputs[i] = 0;
-        for (i = 0; i < 0x10; i++)
-            buf_o_spi[i] = 0;
-        for (i = 0; i < SIZE_DMX; i++)
-            bufer_inputs[i] = 0;
-        for (i = 0; i < 0x10; i++)
-            buf_i_spi[i] = 0;
-    }
+
     position = NOT;
 
     cli();
@@ -123,31 +84,19 @@ void dmx_init(unsigned int boude)
     c_err_inp = 0;
     c_err_out = 0;
     if (cou_inp)
-    {
         f_err_inputs = 'N';
-    }
     else
-    {
         f_err_inputs = 0;
-    }
     disp_err_inputs = ' ';
     if (cou_out)
-    {
         f_err_outputs = 'N';
-    }
     else
-    {
         f_err_outputs = 0;
-    }
     disp_err_outputs = ' ';
     f_start_time_out = 0;
     if (def_spi)
-    {
         if (type_spi != 1)
-        {
             def_spi = 0;
-        }
-    }
     int_err_rs485 = cou_err_485;
     sei();
 }
@@ -166,10 +115,9 @@ void out_bufer(void)
 
 void start_input(void)
 {
-    if (def_spi)
-    {
-        register unsigned char i;
-        register unsigned char sreg = SREG;
+    if (def_spi) {
+        register uint8_t i;
+        register uint8_t sreg = SREG;
         cli();
         PORTE |= 0b01000000;
         PORTB &= ~0x01;
@@ -187,26 +135,21 @@ void start_input(void)
         PORTE &= ~0b01000000;
         SREG = sreg;
     }
-    if (position != NOT)
-    {
+    if (position != NOT) {
         rs_d_interrupt();
         set_reciv();
         cou_wait = 0;
         f_err_inputs = 'O';
         c_err_inp = cou >> 1;
         to_start_outputs();
-    }
-    else
-    {
-        if (cou_inp)
-        {
+    } else {
+        if (cou_inp) {
             cou = crc = 0;
             char_bufer[0] = COMAND_INP;
             char_bufer[1] = 0;
             position = WAIT_INPUT_DATA;
             out_bufer();
-        }
-        else
+        } else
             to_start_outputs();
     }
 }
@@ -214,14 +157,12 @@ void start_input(void)
 void start_outputs(void)
 {
     noi_clr_err_prot_in_start = 0;
-    if (cou_out)
-    { // OUTPUT
-        register unsigned char *p, i;
+    if (cou_out) { // OUTPUT
+        register uint8_t *p, i;
         p = char_bufer;
         *p++ = COMAND_OUT;
         cou = crc = 0;
-        for (i = 0; i < cou_out; i++)
-        {
+        for (i = 0; i < cou_out; i++) {
             *p = DATA_HIGH | ((bufer_outputs[i] >> 4) & 0x0f);
             crc += *p++;
             *p = DATA_HIGH | (bufer_outputs[i] & 0x0f);
@@ -238,8 +179,7 @@ void start_outputs(void)
 void send_time_out(void)
 {
     noi_clr_err_prot_in_start = 1;
-    if (time_out)
-    { // TIME_OUT
+    if (time_out) { // TIME_OUT
         char_bufer[0] = COMAND_TIMING;
         crc = char_bufer[1] = DATA_HIGH | ((time_out >> 4) & 0x0f);
         crc += char_bufer[2] = DATA_HIGH | (time_out & 0x0f);
@@ -248,17 +188,14 @@ void send_time_out(void)
         char_bufer[5] = 0;
         position = WAIT_NAK_TIME_OUT;
         out_bufer();
-    }
-    else
+    } else
         f_start_time_out = 0;
 }
 
 void to_start_outputs(void)
 {
-    if (cou_out)
-    {
-        if (f_start_time_out)
-        {
+    if (cou_out) {
+        if (f_start_time_out) {
             send_time_out();
 #ifndef MULTITASKING
             while (position != NOT)
@@ -275,13 +212,10 @@ void to_start_outputs(void)
 void start_lader(void)
 {
     { // if(cou_inp){
-        register char err_in_prot;
-        if ((err_in_prot = (f_err_inputs | f_err_outputs)))
-        {
-            if (err_prot_in_start == 0)
-            {
-                if (--int_err_rs485)
-                {
+        register uint8_t err_in_prot;
+        if ((err_in_prot = (f_err_inputs | f_err_outputs))) {
+            if (err_prot_in_start == 0) {
+                if (--int_err_rs485) {
                     f_err_inputs = 0;
                     c_err_inp = 0;
                     f_err_outputs = 0;
@@ -291,19 +225,15 @@ void start_lader(void)
                 }
             }
             int_err_rs485 = 1;
-            if (f_err_inputs)
-            {
+            if (f_err_inputs) {
                 disp_err_inputs = f_err_inputs;
                 disp_err_cou_inputs = c_err_inp;
             }
-            if (f_err_outputs)
-            {
+            if (f_err_outputs) {
                 disp_err_outputs = f_err_outputs;
                 disp_err_cou_outputs = c_err_out;
             }
-        }
-        else
-        {
+        } else {
             int_err_rs485 = cou_err_485;
         }
         f_err_inputs = 0;
@@ -311,30 +241,24 @@ void start_lader(void)
         f_err_outputs = 0;
         c_err_out = 0;
 
-        if (err_in_prot)
-        {
-            register unsigned char i;
+        if (err_in_prot) {
+            register uint8_t i;
             for (i = 0; i < cou_out; i++)
                 bufer_outputs[i] = 0;
             for (i = 0; i < def_spi; i++)
                 buf_o_spi[i] = 0;
             start_input();
-        }
-        else
-        {
+        } else {
             if (noi_clr_err_prot_in_start == 0)
                 err_prot_in_start = 0;
-            if (disp_err_inputs || disp_err_outputs)
-            {
-                register unsigned char i;
+            if (disp_err_inputs || disp_err_outputs) {
+                register uint8_t i;
                 for (i = 0; i < cou_out; i++)
                     bufer_outputs[i] = 0;
                 for (i = 0; i < def_spi; i++)
                     buf_o_spi[i] = 0;
                 start_input();
-            }
-            else
-            {
+            } else {
                 send_inp_to_lader();
                 send_out_from_lader();
                 start_input();
@@ -349,29 +273,21 @@ void start_lader(void)
 void USART0_RX_vect(void) __attribute__((signal));
 void USART0_RX_vect(void)
 {
-    register unsigned char c_prot;
-    if (UCSR0A & (_BV(FE0) | _BV(DOR0)))
-    {
+    register uint8_t c_prot;
+    if (UCSR0A & (_BV(FE0) | _BV(DOR0))) {
         c_prot = UDR0;
-    }
-    else
-    {
+    } else {
         c_prot = UDR0;
         cou_wait = 3;
-        switch (position)
-        {
+        switch (position) {
         case WAIT_INPUT_DATA:
             crc += c_prot;
-            if (cou & 0x01)
-            {
+            if (cou & 0x01) {
                 bufer_inputs[cou >> 1] |= c_prot & 0x0f;
-            }
-            else
-            {
+            } else {
                 bufer_inputs[cou >> 1] = c_prot << 4;
             }
-            if ((cou_inp << 1) == (++cou))
-            {
+            if ((cou_inp << 1) == (++cou)) {
                 position = WAIT_NACK_INP;
                 char_bufer[0] = CRC_HIGH | (crc >> 4);
                 char_bufer[1] = CRC_HIGH | (crc & 0x0f);
@@ -381,33 +297,24 @@ void USART0_RX_vect(void)
             return;
             break;
         case WAIT_ACK_OUT:
-            if (c_prot != ACK_HIGH)
-            {
-                if (c_prot == NAK)
-                {
+            if (c_prot != ACK_HIGH) {
+                if (c_prot == NAK) {
                     f_err_outputs = 'C';
                     c_err_out = cou;
-                }
-                else if (c_prot == (ACK_HIGH + 1))
-                {
+                } else if (c_prot == (ACK_HIGH + 1)) {
                     f_err_outputs = 'R';
                     c_err_out = cou;
                     f_start_time_out = 1;
-                }
-                else if (c_prot == (ACK_HIGH + 2))
-                {
+                } else if (c_prot == (ACK_HIGH + 2)) {
                     f_err_outputs = 'P';
                     c_err_out = cou;
                     f_start_time_out = 1;
-                }
-                else
-                {
+                } else {
                     f_err_outputs = '?';
                     c_err_out = cou;
                 }
             }
-            if ((++cou) == cou_out)
-            {
+            if ((++cou) == cou_out) {
                 position = NOT;
                 cou_wait = 0;
                 rs_d_interrupt();
@@ -443,18 +350,15 @@ void USART0_RX_vect(void)
 void USART0_TX_vect(void) __attribute__((signal));
 void USART0_TX_vect(void)
 {
-    if (fl_end_tr)
-    {
-        if (cou_wait)
-        {
+    if (fl_end_tr) {
+        if (cou_wait) {
             UDR0 = 0xff;
             cou_wait--;
             return;
         }
         rs_d_interrupt();
         fl_end_tr = 0;
-        switch (position)
-        {
+        switch (position) {
         case NOT:
             return;
             break;
@@ -488,15 +392,10 @@ void USART0_TX_vect(void)
             return;
             break;
         }
-    }
-    else
-    {
-        if (*bufer_point)
-        {
+    } else {
+        if (*bufer_point) {
             UDR0 = *bufer_point++;
-        }
-        else
-        {
+        } else {
             fl_end_tr = 1;
             set_reciv();
             UDR0 = 0xff;
