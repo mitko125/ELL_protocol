@@ -34,8 +34,8 @@ static const char *TAG = "ELL_slave";
 
 #define BUF_SIZE (128)
 
-#define OUT_COU 2 // брой осмици релейни изходи
-#define INP_COU 1 // брой осмици цифрови входове
+#define OUT_COU 1 // брой осмици релейни изходи
+#define INP_COU 2 // брой осмици цифрови входове
 
 // номер на вх/изх. настройват се с джъмпери
 #define NUMBER_OUT 0    
@@ -66,6 +66,7 @@ enum
 static void set_relay(void) // задейства релетата
 {
     time_wait = data_time_wait;
+    // !!!
     //  PORTA=bufer[0];
     //  PORTC=bufer[1];
 
@@ -111,6 +112,7 @@ first:
 
 static void reset_relay(void) // нулира релетата
 {
+    // !!!
     ;
 }
 
@@ -124,7 +126,8 @@ static void read_inputs(void) // прочита цифровите входов�
             inp0 ++;
         }
         for (int i = 0; i < INP_COU; i++)
-            input_bufer[i] = 0;//inp0;
+            input_bufer[i] = inp0;
+            // !!!
     }
 }
 
@@ -178,10 +181,6 @@ static void init_fun(void)
         data_time_wait_inp = 10; // 10ms
     time_wait_inp = data_time_wait_inp;
     ack_bufer = ACK_HIGH | 0x02;
-    
-    // реализация в AVR
-    // TCNT0 = MS; // прекъсване на 1ms
-    // PORTD &= 0xf7; /*светодиод READY	*/
 }
 
 static void ack_relay(void) // извежда ACK,NACK за релейните изходи по протокола
@@ -311,14 +310,13 @@ static void read_byte(uint8_t c) // за четене данни от прото
                         out_buf(1);
                         ESP_LOGE(TAG, "INP ERR 0x%02X != 0x%02X", crc, buf_crc);
                     } else {
-                        ;
-                        //		printf("INP OK\n\r");
+                        ESP_LOGD(TAG, "INP OK");
                     }
                     position = NOT;
                 } else if (position == TIMING) { // crc за тайминг
                     if (crc == buf_crc) {
                         time_wait = data_time_wait = cou;
-                        //	      printf("TIMING %d\n\r",cou);
+                        ESP_LOGI(TAG, "TIMING Set = %d", cou);
                     } else {
                         flag_first = 1;
                         char_buf[0] = NAK;

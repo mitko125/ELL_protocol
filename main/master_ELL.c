@@ -49,6 +49,9 @@ void master_task(void *arg)
         .rx_flow_ctrl_thresh = 122,
         .source_clk = UART_SCLK_DEFAULT,
     };
+
+    ESP_LOGI(TAG, "Start RS485 and configure UART.");
+    
     {   //RS4851 2
         // Install UART driver (we don't need an event queue here)
         ESP_ERROR_CHECK(uart_driver_install(MASTER_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 0, NULL, ESP_INTR_FLAG_SHARED));
