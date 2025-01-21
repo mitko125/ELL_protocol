@@ -126,7 +126,7 @@ static void read_inputs(void) // прочита цифровите входов�
             inp0 ++;
         }
         for (int i = 0; i < INP_COU; i++)
-            input_bufer[i] = inp0;
+            input_bufer[i] = 0;//inp0;
             // !!!
     }
 }
@@ -460,7 +460,7 @@ static void uart_init(void)
 
     ESP_LOGI(TAG, "Start RS485 and configure UART.");
 
-    ESP_ERROR_CHECK(uart_driver_install(SLAVE_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart0_queue, 0));
+    ESP_ERROR_CHECK(uart_driver_install(SLAVE_UART_PORT, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart0_queue, ESP_INTR_FLAG_SHARED));
 
     // Configure UART parameters
     ESP_ERROR_CHECK(uart_param_config(SLAVE_UART_PORT, &uart_config));

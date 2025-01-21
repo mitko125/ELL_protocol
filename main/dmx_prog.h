@@ -17,9 +17,10 @@
 
 void dmx_init(uint32_t boude);
 
-void start_lader(void);	/*стартира ладера и протокола
+/*стартира ладера и протокола
 вика се от птекъсването за LCD, на 10ms при 115200 или 100ms при 9600
 	прототип	в DMX.C	*/
+void start_lader(void);	
 
 /*следните променливи и функции трябва да се удоволетворяват от други
 програми:
@@ -50,6 +51,7 @@ extern uint8_t disp_err_outputs;	/*вида на грешката		*/
 extern uint8_t disp_err_cou_inputs;
 extern uint8_t disp_err_cou_outputs;
 extern uint8_t cou_inp,cou_out; //брой входове и изходи 
+extern uint8_t flag_overlay_lader;  /*ладера се е препокрил	*/
 
 #ifdef LONG_DMX
 #define SIZE_DMX 0x20

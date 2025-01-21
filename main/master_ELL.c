@@ -15,9 +15,7 @@
 
 #include "protocol_ELL_defs.h"
 
-static const char *TAG = "ELL_master";
-
-#define MASTER_UART_PORT UART_NUM_2
+static const char *TAG = "ELL_old_master";
 
 // #define LEFT_UART               1
 
