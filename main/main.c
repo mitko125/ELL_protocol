@@ -75,14 +75,8 @@ void app_main(void)
     // } else
     //     disp_err_inputs = disp_err_outputs = 0;
     // bat_rs485 = 0;
-
     enable_lader = 1;
 
-    // while (1)
-        vTaskDelay(1);
-
-
-    // xTaskCreate(master_task, "master_task", 2 * 4096, NULL, 10, NULL);
 }
 
 void my_lader_setings(void)
@@ -99,22 +93,11 @@ void my_lader_setings(void)
     cou_err_485 = 3;                 // колко грешки са допустими в протокола преди аларма
     def_spi = 0;                     // колоко осмици вход/изхода има по SPI
     type_spi = 1;                    //
-    data_wait_to_lader_mul_10ms = 1; // на колко по 10ms да се пуска ладера min. 1
+    data_wait_to_lader_mul_10ms = 1; // на колко по 10ms да се пуска ладера minimum 1
 }
 
-static uint8_t fl_20ms;
 void my_lader(void)
 {
-    if (fl_20ms ^= 0x01) {
-        /*register unsigned char *p;
-        crc=0;
-        for(p=(unsigned char *)(&num_program);p!=&crc;)
-          crc+=*p++;
-        *p=crc;
-        if(time_wait)
-          time_wait--;*/
-    }
-
     if (enable_lader) {
         // register uint8_t accum;
         // static uint8_t my_stack[50];

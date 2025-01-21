@@ -1,34 +1,47 @@
 /********************************************************
-*	      LADER.H					                                *
-*  ОПИСАНИЕ НА ПОДПРОГРАМИ ЗА ЛАДЕРА			              *
-*	ЕЛЛ - Д.Божилов 08.2000				                        *
+*	      LADER.H
+*  ОПИСАНИЕ НА ПОДПРОГРАМИ ЗА ЛАДЕРА
+*	ЕЛЛ - Д.Божилов 08.2000
+*
+*   ЕЛЛ - Д.Божилов 01.2025 прехвърлено на ESP32
 ********************************************************/
 
 #include <stdlib.h>
 
-/*	библиотеката 	L_ELL.R07	*/
-/* 			LAD_ELL.R07 е за фирма ELL	*/
+//прехвърля прочетените входове към ладера преди стартирането му 
+void send_inp_to_lader(void);
 
-void send_inp_to_lader(void);       //прехвърля прочетените
-//входове към ладера преди стартирането му 
-void send_out_from_lader(void);     //прехвърля изработените
-//от ладера изходи към протокола за изпращане към релейните платки
+//прехвърля изработените от ладера изходи към протокола за изпращане към релейните платки
+void send_out_from_lader(void);
 
+// брой осмици входове по протокола
+extern uint8_t def_inp;
+// брой осмици изходи по протокола
+extern uint8_t def_out;
+// време за нулиране на изходите след отпадене на протокола в mS
+extern uint8_t time_out;
+// колко грешки са допустими в протокола преди аларма
+extern uint8_t cou_err_485;
+// колоко осмици вход/изхода има по SPI, остатъци от AVR в ESP32 ако има нужда ще се премине на I2C
+extern uint8_t def_spi,type_spi;
+// на колко по 10ms да се пуска ладера minimum 1
+extern uint8_t data_wait_to_lader_mul_10ms;
 
-/*non_banked void lader(void);	ладера който се запуска с протокола
-да си я направим	*/
-
-extern void  (* next_lader)(void);
-
-extern uint8_t def_inp,def_out,time_out,cou_err_485,def_spi,type_spi,data_wait_to_lader_mul_10ms;
-
+// памет за осмици входове по протокола
 extern uint8_t input_mem[];
+// памет за осмици изходи по протокола
 extern uint8_t output_mem[];
-//no_bacup_mem
+// памет за осмици релета
 extern uint8_t relay[];  
-//bacup_mem
-extern uint8_t timer[];  
+// памет за таймери
+extern uint8_t timer[];
+// памет за броячи
 extern uint8_t counter[];
 
-void init_lader_mem(void);	//инициализира паметта за ладера lader.c
-void my_lader(void);
+//инициализира паметта за ладера lader.c
+void init_lader_mem(void);	
+
+// Изпълнение на ладер програмата, извиква се при успешен
+// обмен на данните по протокола.
+// Трябва ба си я самоорганизираме.
+extern void my_lader(void);

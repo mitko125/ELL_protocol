@@ -14,8 +14,6 @@
 #include "esp_timer.h"
 #include "driver/gpio.h"
 
-#include "protocol_ELL_defs.h"
-
 static const char *TAG = "ELL_slave";
 
 #define LEFT_UART 1
@@ -34,8 +32,18 @@ static const char *TAG = "ELL_slave";
 
 #define BUF_SIZE (128)
 
+#define COMAND_HIGH 0x00
+#define COMAND_OUT 0x04
+#define COMAND_INP 0x05
+#define COMAND_TIMING 0x06
+#define DATA_HIGH 0x30
+#define CRC_HIGH 0x40
+#define NAK 0x00
+#define ACK_HIGH 0x50
+
 #define OUT_COU 1 // брой осмици релейни изходи
 #define INP_COU 2 // брой осмици цифрови входове
+#define BAUD_RATE 115200    // !!! избира се с PIS
 
 // номер на вх/изх. настройват се с джъмпери
 #define NUMBER_OUT 0    
@@ -149,7 +157,7 @@ static void init_fun(void)
     // PIS |= 0x20;    // !!! за тестове без пауза с един ненужен 0xff за забавяне на данните
 
 #if BAUD_RATE == 115200
-    PIS |= 0x02;    // за демо
+    PIS |= 0x02;
 #endif
 
     if (PIS & 0x80)
@@ -403,9 +411,6 @@ static void uart_event_task(void *pvParameters)
     for (;;) {
         //Waiting for UART event.
         if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
-
-            gpio_set_level(TOGLE_PIN1, !gpio_get_level(TOGLE_PIN1));
-
             switch (event.type) {
             case UART_DATA:
                 uart_read_bytes(SLAVE_UART_PORT, dtmp, event.size, portMAX_DELAY);

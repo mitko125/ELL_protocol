@@ -3,8 +3,6 @@
 #include "lader.h"
 #include "dmx_prog.h"
 
-void (*next_lader)(void);
-
 uint8_t def_inp, def_out, time_out, cou_err_485, def_spi, type_spi, data_wait_to_lader_mul_10ms;
 void my_lader_setings(void);
 
@@ -19,7 +17,6 @@ uint8_t counter[0x10];
 void init_lader_mem(void)
 {
     my_lader_setings();
-    next_lader = 0;
 }
 
 void send_inp_to_lader(void)
