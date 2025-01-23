@@ -27,7 +27,7 @@ void app_main(void)
     gpio_config_t gpio_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pin_bit_mask = ((1ULL << TOGLE_PIN1) | (1ULL << TOGLE_PIN2)),
+        .pin_bit_mask = ((1ULL << Start1Ok0) | (1ULL << EventTogle) | (1ULL << FreeTogle) | (1ULL << Error1)),
     };
     ESP_ERROR_CHECK(gpio_config(&gpio_conf));
 
@@ -77,6 +77,15 @@ void app_main(void)
     // bat_rs485 = 0;
     enable_lader = 1;
 
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    while (1) {
+        gpio_set_level(FreeTogle, !gpio_get_level(FreeTogle));
+        if (xTaskGetTickCount() > (xLastWakeTime + 3)) {
+            vTaskDelay(1);
+            xLastWakeTime = xTaskGetTickCount();
+        }
+    }
+
 }
 
 void my_lader_setings(void)
@@ -90,7 +99,7 @@ void my_lader_setings(void)
 #endif
     time_out = 250; // време за нулиране на изходите след отпадене на протокола
 
-    cou_err_485 = 3;                 // колко грешки са допустими в протокола преди аларма
+    cou_err_485 = 1;//3;                 // колко грешки са допустими в протокола преди аларма
     def_spi = 0;                     // колоко осмици вход/изхода има по SPI
     type_spi = 1;                    //
     data_wait_to_lader_mul_10ms = 1; // на колко по 10ms да се пуска ладера minimum 1
