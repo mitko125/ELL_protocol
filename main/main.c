@@ -17,7 +17,8 @@
 #include "dmx_prog.h"
 #include "lader.h"
 
-uint8_t enable_lader;
+// за симулиране на контролер с LCD индикатор и ладер програма
+char enable_lader, bat_rs485, fl_disp, str[30];
 
 extern void slave_main(void *arg);
 extern void master_task(void *arg);
@@ -32,50 +33,48 @@ void app_main(void)
     ESP_ERROR_CHECK(gpio_config(&gpio_conf));
 
     xTaskCreate(slave_main, "slave_main", 2 * 4096, NULL, 4, NULL);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     init_lader_mem();
     dmx_init(115200L);
 
-    // bat_rs485 = 1;
-
-    // if (def_inp) {
-    //     fl_disp = 1;
-    //     prn_ind_P(PSTR("\1Start RS485"));
-    //     strcpy_P(str, PSTR("\2I:    O: "));
-    //     while (err_prot_in_start) {
-    //         extern char key_buf;
-    //         if (flag_overlay_lader) {
-    //             prn_ind_P(PSTR("\1OVERLAY LADER"));
-    //             bat_rs485 = 1;
-    //             while (1) {
-    //                 NutSleep(50);
-    //             }
-    //         }
-    //         if (key_buf) {
-    //             inpkey();
-    //             strcpy_P(str, PSTR("\2I:    O: "));
-    //         }
-    //         if (disp_err_inputs && (disp_err_inputs != 1)) {
-    //             sprintf_P(str + 3, PSTR("%c%.2d"), disp_err_inputs, disp_err_cou_inputs);
-    //             str[6] = ' ';
-    //             disp_err_inputs = 1;
-    //         }
-    //         if (disp_err_outputs && (disp_err_outputs != 1)) {
-    //             sprintf_P(str + 9, PSTR("%c%.2d"), disp_err_outputs, disp_err_cou_outputs);
-    //             disp_err_outputs = 1;
-    //         }
-    //         prn_ind(str);
-    //         NutSleep(10);
-    //     }
-    //     disp_err_inputs = disp_err_outputs = 0;
-    //     prn_ind_P(PSTR("\1"));
-    //     prn_ind_P(PSTR("\2"));
-    //     fl_disp = 0;
-    // } else
-    //     disp_err_inputs = disp_err_outputs = 0;
-    // bat_rs485 = 0;
-    enable_lader = 1;
+    {   // за симулиране на контролер с LCD индикатор и ладер програма това е при стартиране
+        bat_rs485 = 1;
+        if (def_inp || def_out) {
+            fl_disp = 1;
+            printf("Start RS485\n");
+            strcpy(str, "I:    O: ");
+            while (err_prot_in_start) {
+                if (flag_overlay_lader) {
+                    printf("OVERLAY LADER");
+                    bat_rs485 = 1;
+                    while (1) {
+                        vTaskDelay(pdMS_TO_TICKS(50));
+                    }
+                }
+                if (getchar() > 0) {
+                    strcpy(str, "I:    O: ");
+                }
+                if (disp_err_inputs && (disp_err_inputs != 1)) {
+                    sprintf(str + 2, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
+                    str[5] = ' ';
+                    disp_err_inputs = 1;
+                }
+                if (disp_err_outputs && (disp_err_outputs != 1)) {
+                    sprintf(str + 8, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
+                    disp_err_outputs = 1;
+                }
+                printf("%s\n", str);
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            disp_err_inputs = disp_err_outputs = 0;
+            printf("RS485 Started\n");
+            fl_disp = 0;
+        } else
+            disp_err_inputs = disp_err_outputs = 0;
+        bat_rs485 = 0;
+        enable_lader = 1;
+    }
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
     while (1) {
@@ -83,20 +82,49 @@ void app_main(void)
         if (xTaskGetTickCount() > (xLastWakeTime + 3)) {
             vTaskDelay(1);
             xLastWakeTime = xTaskGetTickCount();
+        } else {    // за симулиране на контролер с LCD индикатор и ладер програма това е в работен цикъл
+            if (flag_overlay_lader) {
+                printf("OVERLAY LADER");
+                bat_rs485 = 1;
+                while (1) {
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                }
+            }
+            if (disp_err_inputs || disp_err_outputs) {
+                bat_rs485 = 1;
+                printf("ERROR RS485\n");
+                strcpy(str, "I:    O: ");
+
+                while (1) {
+                    if (getchar() > 0) {
+                        printf("End error RS485\n");
+                        break;
+                    }
+                    if (disp_err_inputs && (disp_err_inputs != 1)) {
+                        sprintf(str + 2, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
+                        str[5] = ' ';
+                        disp_err_inputs = 1;
+                    }
+                    if (disp_err_outputs && (disp_err_outputs != 1)) {
+                        sprintf(str + 8, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
+                        disp_err_outputs = 1;
+                    }
+                    printf("%s\n", str);
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                }
+                disp_err_outputs = disp_err_inputs = 0;
+                bat_rs485 = 0;
+            }
         }
     }
-
 }
 
+// демо настройи на ладер
 void my_lader_setings(void)
 {
-#ifdef SIMULATOR
-    def_inp = 0; // 1;//DMX_INPUTS;      //брой осмици входове по протокола
-    def_out = 0; // 2;//3;      //брой осмици изходи по протокола
-#else
-    def_inp = 2; // брой осмици входове по протокола
-    def_out = 1; // брой осмици изходи по протокола
-#endif
+    def_inp = 16; // брой осмици входове по протокола
+    def_out = 16; // брой осмици изходи по протокола
+
     time_out = 250; // време за нулиране на изходите след отпадене на протокола
 
     cou_err_485 = 1;//3;                 // колко грешки са допустими в протокола преди аларма
@@ -105,6 +133,7 @@ void my_lader_setings(void)
     data_wait_to_lader_mul_10ms = 1; // на колко по 10ms да се пуска ладера minimum 1
 }
 
+// демо ладер
 void my_lader(void)
 {
     if (enable_lader) {
@@ -121,5 +150,11 @@ void my_lader(void)
 
         // accum = 1;
         // SET(R_FIRST_CYCLE);
+
+        static int cou = 0;
+        if (++cou == 10 * 100) {    // на 10 секунди нови изходи
+            cou = 0;
+            output_mem[0] = input_mem[0];
+        }
     }
 }

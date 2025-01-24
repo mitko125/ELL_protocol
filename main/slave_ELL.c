@@ -42,8 +42,8 @@ static const char *TAG = "ELL_slave";
 #define NAK 0x00
 #define ACK_HIGH 0x50
 
-#define OUT_COU 1 // брой осмици релейни изходи
-#define INP_COU 2 // брой осмици цифрови входове
+#define OUT_COU 16 // брой осмици релейни изходи
+#define INP_COU 16 // брой осмици цифрови входове
 #define BAUD_RATE 115200    // !!! избира се с PIS
 
 // номер на вх/изх. настройват се с джъмпери
@@ -73,6 +73,8 @@ enum
     TIMING
 } position;
 
+static uint8_t demo_relay[OUT_COU];
+
 // задейства релетата
 static void set_relay(void) 
 {
@@ -80,13 +82,7 @@ static void set_relay(void)
     // !!!
     //  PORTA=bufer[0];
     //  PORTC=bufer[1];
-
-    static uint8_t old_relays[OUT_COU] = {0}; // за демо
-    if (memcmp(old_relays, bufer, OUT_COU)) {
-        memcpy(old_relays, bufer, OUT_COU);
-        ESP_LOGI(TAG, "New Relays");
-        ESP_LOG_BUFFER_HEX(TAG, old_relays, OUT_COU);
-    }
+    memcpy(demo_relay, bufer, OUT_COU);
 }
 
 static gptimer_handle_t timer_one_byte = NULL;
@@ -139,7 +135,7 @@ static void read_inputs(void)
             inp0 ++;
         }
         for (int i = 0; i < INP_COU; i++)
-            input_bufer[i] = 0;//inp0;
+            input_bufer[i] = inp0;
             // !!!
     }
 }
@@ -424,6 +420,13 @@ void slave_main(void *arg)
         old_time = new_time;
 
         vTaskDelay(1);
+
+        static uint8_t old_relays[OUT_COU] = {0}; // за демо
+        if (memcmp(old_relays, demo_relay, OUT_COU)) {
+            memcpy(old_relays, demo_relay, OUT_COU);
+            ESP_LOGI(TAG, "New Relays");
+            ESP_LOG_BUFFER_HEX(TAG, old_relays, OUT_COU);
+        }
 
 #if OUT_COU != 0
         if ((data_time_wait == 10) || (time_wait == 0)) {    // за да симулираме искане за TIMING

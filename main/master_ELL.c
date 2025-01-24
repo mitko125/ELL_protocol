@@ -44,6 +44,7 @@ static const char *TAG = "ELL_master";
 #define BUF_SIZE        (128)
 
 #define TIMER_BYTE_LENGHT 10    // 1stat + 8data + 1stop bits
+#define ADDITIONAL_WAIT 4
 
 #define COMAND_HIGH 0x00
 #define COMAND_OUT 0x04
@@ -99,13 +100,12 @@ static uint8_t crc, cou;
 
 static gptimer_handle_t timer_n_bytes = NULL;
 
-static void out_bufer(uint8_t expected_bytes, bool wait_to_error_bytes)
+static void out_bufer(uint8_t expected_bytes, int wait_to_error_bytes)
 {
     if (wait_to_error_bytes) {
-        uint8_t wait_butes = 3; //1 заради забавяне на slave по RS485, 1 заради забавяне на ESP32 task и 1 резерва
-        gpio_set_level(Error1, !gpio_get_level(Error1));
-        ESP_ERROR_CHECK(gptimer_set_raw_count(timer_n_bytes, 
-            (strlen((char *)char_bufer) + expected_bytes + wait_butes) * TIMER_BYTE_LENGHT));
+        // за тест и на таймера
+        // gpio_set_level(Start1Ok0, !gpio_get_level(Start1Ok0));
+        ESP_ERROR_CHECK(gptimer_set_raw_count(timer_n_bytes, wait_to_error_bytes * TIMER_BYTE_LENGHT));
         ESP_ERROR_CHECK(gptimer_start(timer_n_bytes));
     }
 
@@ -121,7 +121,7 @@ static void start_input(void)
     if (position != NOT) {
         f_err_inputs = 'O';
         c_err_inp = cou >> 1;
-        flag_overlay_lader = 1;  // !!! трябва ди измисля как да го хвана по-добре
+        flag_overlay_lader = 1;
         ESP_LOGE(TAG, "Lader OVERFLOW");
         to_start_outputs();
     } else {
@@ -130,7 +130,7 @@ static void start_input(void)
             char_bufer[0] = COMAND_INP;
             char_bufer[1] = 0;
             position = WAIT_INPUT_DATA;
-            out_bufer(cou_inp << 1, true);
+            out_bufer(cou_inp << 1, 1 + (cou_inp << 1) + ADDITIONAL_WAIT);
         } else
             to_start_outputs();
     }
@@ -154,7 +154,7 @@ static void start_outputs(void)
         *p++ = CRC_HIGH | (crc & 0x0f);
         *p = 0;
         position = WAIT_ACK_OUT;
-        out_bufer(cou_out, true);
+        out_bufer(cou_out, 1 + 2 * cou_out + 2 + cou_out + ADDITIONAL_WAIT);
     }
 }
 
@@ -169,7 +169,7 @@ static void send_time_out(void)
         char_bufer[4] = CRC_HIGH | (crc & 0x0f);
         char_bufer[5] = 0;
         position = WAIT_NAK_TIME_OUT;
-        out_bufer(1, true);
+        out_bufer(1, 1 + 2 + 2 + ADDITIONAL_WAIT + 1);
     } else
         f_start_time_out = 0;
 }
@@ -237,7 +237,14 @@ static void start_lader(void)
                 send_inp_to_lader();
                 send_out_from_lader();
                 start_input();
-                my_lader();
+                static uint8_t my_lader_over = 0;
+                if (my_lader_over)
+                    flag_overlay_lader = 1;
+                else {
+                    my_lader_over = 1;
+                    my_lader();
+                    my_lader_over = 0;
+                }
             }
         }
     }
@@ -249,12 +256,14 @@ static bool IRAM_ATTR timer_n_bytes_on_alarm_cb(gptimer_handle_t timer, const gp
     // stop timer immediately
     gptimer_stop(timer);
 
-    gpio_set_level(Error1, !gpio_get_level(Error1));
+    // за тест и на таймера
+    // gpio_set_level(Start1Ok0, !gpio_get_level(Start1Ok0));
 
     switch (position) {
     case NOT:
         break;
     case WAIT_INPUT_DATA:
+        gpio_set_level(Error1, 1);
         f_err_inputs = 'N';
         c_err_inp = cou >> 1;
         position = NOT;
@@ -269,6 +278,7 @@ static bool IRAM_ATTR timer_n_bytes_on_alarm_cb(gptimer_handle_t timer, const gp
         f_start_time_out = 0;
         break;
     case WAIT_ACK_OUT:
+        gpio_set_level(Error1, 1);
         f_err_outputs = 'N';
         c_err_out = cou;
         position = NOT;
@@ -292,7 +302,7 @@ static void uart_event_task(void *pvParameters)
 
             gpio_set_level(EventTogle, !gpio_get_level(EventTogle));
             if (event.timeout_flag)
-                gpio_set_level(Error1, !gpio_get_level(Error1));
+                gpio_set_level(Error1, 1);
 
             switch (event.type) {
             case UART_DATA:
@@ -315,7 +325,7 @@ static void uart_event_task(void *pvParameters)
                                 char_bufer[0] = CRC_HIGH | (crc >> 4);
                                 char_bufer[1] = CRC_HIGH | (crc & 0x0f);
                                 char_bufer[2] = 0;
-                                out_bufer(1, true);
+                                out_bufer(1, 2 + ADDITIONAL_WAIT);
 
                                 event.size = 0;
                                 ESP_ERROR_CHECK(uart_flush_input(MASTER_UART_PORT));
@@ -324,12 +334,14 @@ static void uart_event_task(void *pvParameters)
                             break;
                         case WAIT_NACK_INP:
                             gptimer_stop(timer_n_bytes);
+                            gpio_set_level(Error1, 1);
                             f_err_inputs = 'C';
                             position = NOT;
                             to_start_outputs();
                             break;
                         case WAIT_ACK_OUT:
                             if (c_prot != ACK_HIGH) {
+                                gpio_set_level(Error1, 1);
                                 if (c_prot == NAK) {
                                     f_err_outputs = 'C';
                                     c_err_out = cou;
@@ -357,6 +369,7 @@ static void uart_event_task(void *pvParameters)
                             }
                             break;
                         case WAIT_NAK_TIME_OUT:
+                            gpio_set_level(Error1, 1);
                             gptimer_stop(timer_n_bytes);
                             f_err_outputs = 'C';
                             position = NOT;
