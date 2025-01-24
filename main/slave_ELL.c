@@ -15,8 +15,6 @@
 #include "driver/gpio.h"
 #include "driver/gptimer.h"
 
-#include "protocol_ELL_defs.h"
-
 static const char *TAG = "ELL_slave";
 
 #define LEFT_UART 1
@@ -107,7 +105,6 @@ static void out_buf(uint8_t bytes_to_send)
         } else {
             flag_first = 0;
             // забавяне с един байт на данните
-            gpio_set_level(Error1, !gpio_get_level(Error1));
             bytes_to_send_in_cb = bytes_to_send;
             ESP_ERROR_CHECK(gptimer_set_raw_count(timer_one_byte, 0));
             ESP_ERROR_CHECK(gptimer_start(timer_one_byte));
@@ -156,8 +153,6 @@ static bool IRAM_ATTR timer_one_byte_on_alarm_cb(gptimer_handle_t timer, const g
     // stop timer immediately
     gptimer_stop(timer);
 
-    gpio_set_level(Error1, !gpio_get_level(Error1));
-
     uart_write_bytes(SLAVE_UART_PORT, char_buf, bytes_to_send_in_cb);
     if (flag_set_relay) {
         set_relay();
@@ -188,7 +183,6 @@ static void init_fun(void)
     ESP_LOGI(TAG, "Enable timer");
     ESP_ERROR_CHECK(gptimer_enable(timer_one_byte));
 
-    ESP_LOGI(TAG, "Start timer, stop it at alarm event");
     gptimer_alarm_config_t alarm_one_byte = {
         .alarm_count = 10, // 1stat + 8data + 1stop bits
     };
@@ -432,7 +426,8 @@ void slave_main(void *arg)
         vTaskDelay(1);
 
 #if OUT_COU != 0
-        if (time_wait == 0) { // нулира релейните изходи при timewait
+        if ((data_time_wait == 10) || (time_wait == 0)) {    // за да симулираме искане за TIMING
+        // if (time_wait == 0) { // нулира релейните изходи при timewait
             reset_relay();
             if (ack_bufer == ACK_HIGH) {
                 ack_bufer = ACK_HIGH | 0x01;
@@ -465,16 +460,10 @@ static void uart_event_task(void *pvParameters)
     for (;;) {
         //Waiting for UART event.
         if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
-
-            gpio_set_level(EventTogle, !gpio_get_level(EventTogle));
-            if (event.timeout_flag)
-                gpio_set_level(Error1, !gpio_get_level(Error1));
-
             switch (event.type) {
             case UART_DATA:
                 uart_read_bytes(SLAVE_UART_PORT, dtmp, event.size, portMAX_DELAY);
                 for(int i = 0; i < event.size; i++) {
-                    // gpio_set_level(Error1, !gpio_get_level(Error1));
                     if (dtmp[i] != 0xff)
                         read_byte(dtmp[i]);
                 }
