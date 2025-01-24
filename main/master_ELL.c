@@ -88,7 +88,8 @@ typedef enum
     WAIT_NAK_TIME_OUT = 4
 } POSITION;
 
-static volatile POSITION position;  // бяха 17бр.
+// вътршни състояния по протокола;
+static volatile POSITION position;
 
 static uint8_t char_bufer[100];
 static uint8_t crc, cou;
@@ -170,7 +171,7 @@ static void send_time_out(void)
             uart_wait_tx_done(MASTER_UART_PORT, portMAX_DELAY);
             position = NOT;
             f_start_time_out = 0;
-            gpio_set_level(Start1Ok0, 0);
+            // !!! gpio_set_level(Start1Ok0, 0);
         }
     } else
         f_start_time_out = 0;
@@ -326,9 +327,9 @@ static void uart_event_task(void *pvParameters)
         //Waiting for UART event.
         if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
 
-            gpio_set_level(EventTogle, !gpio_get_level(EventTogle));
-            if (event.timeout_flag)
-                gpio_set_level(Error1, !gpio_get_level(Error1));
+            // !!! gpio_set_level(EventTogle, !gpio_get_level(EventTogle));
+            // !!! if (event.timeout_flag)
+            // !!!    gpio_set_level(Error1, !gpio_get_level(Error1));
 
             switch (event.type) {
             case UART_DATA:
@@ -386,7 +387,7 @@ static void uart_event_task(void *pvParameters)
                             }
                             if ((++cou) == cou_out) {
                                 position = NOT;
-                                gpio_set_level(Start1Ok0, 0);
+                                // !!! gpio_set_level(Start1Ok0, 0);
                                 cou_wait = 0;
 
                                 event.size = 0;

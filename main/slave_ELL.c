@@ -13,6 +13,9 @@
 #include <esp_err.h>
 #include "esp_timer.h"
 #include "driver/gpio.h"
+#include "driver/gptimer.h"
+
+#include "protocol_ELL_defs.h"
 
 static const char *TAG = "ELL_slave";
 
@@ -62,8 +65,9 @@ static uint8_t time_wait_inp, data_time_wait_inp;
 static uint8_t old_inp[INP_COU];
 static uint8_t PIS;
 
+// вътршни състояния по протокола;
 enum
-{ // вътршни състояния по протокола;
+{ 
     NOT,
     OUT_COMAND,
     OUT_AKNOLICH,
@@ -71,7 +75,8 @@ enum
     TIMING
 } position;
 
-static void set_relay(void) // задейства релетата
+// задейства релетата
+static void set_relay(void) 
 {
     time_wait = data_time_wait;
     // !!!
@@ -86,45 +91,48 @@ static void set_relay(void) // задейства релетата
     }
 }
 
-void out_buf(uint8_t broj)
+static gptimer_handle_t timer_one_byte = NULL;
+static uint8_t bytes_to_send_in_cb = 0;
+
+// извежда данни по UART
+static void out_buf(uint8_t bytes_to_send)
 {
     uint8_t buf_send[1 + sizeof(char_buf)];
     buf_send[0] = 0xff;
-    memcpy(buf_send + 1, char_buf, broj);
+    memcpy(buf_send + 1, char_buf, bytes_to_send);
 
     if ((PIS & 0x20) == 0) {
         if (flag_first == 0) {
             goto first;
         } else {
             flag_first = 0;
-            // с един ненужен 0xff за забавяне на данните
-            ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_UART));
-            uart_write_bytes(SLAVE_UART_PORT, buf_send, 1);
-            uart_wait_tx_done(SLAVE_UART_PORT, portMAX_DELAY);
-            ESP_ERROR_CHECK(uart_set_mode(SLAVE_UART_PORT, UART_MODE_RS485_HALF_DUPLEX));
-            goto first;
-
+            // забавяне с един байт на данните
+            gpio_set_level(Error1, !gpio_get_level(Error1));
+            bytes_to_send_in_cb = bytes_to_send;
+            ESP_ERROR_CHECK(gptimer_set_raw_count(timer_one_byte, 0));
+            ESP_ERROR_CHECK(gptimer_start(timer_one_byte));
         }
     } else {
 first:
         flag_first = 0;
-        // баз един ненужен 0xff за забавяне на данните
-        uart_write_bytes(SLAVE_UART_PORT, buf_send + 1, broj);
-    }
-    uart_wait_tx_done(SLAVE_UART_PORT, portMAX_DELAY);
-    if (flag_set_relay) {
-        set_relay();
-        flag_set_relay = 0;
+        // баз забавяне с един байт на данните
+        uart_write_bytes(SLAVE_UART_PORT, buf_send + 1, bytes_to_send);
+        if (flag_set_relay) {
+            set_relay();
+            flag_set_relay = 0;
+        }
     }
 }
 
-static void reset_relay(void) // нулира релетата
+// нулира релетата при таймоут
+static void reset_relay(void)
 {
     // !!!
     ;
 }
 
-static void read_inputs(void) // прочита цифровите входове във временен буфер и отговаря с него
+// прочита (синхронно за всички платки) цифровите входове във временен буфер и ще отговаря с него
+static void read_inputs(void)
 {
     if (data_time_wait_inp == 0) {
         static uint8_t inp0 = 0;    // за демо
@@ -139,10 +147,53 @@ static void read_inputs(void) // прочита цифровите входов�
     }
 }
 
+// инициализизиране на UART
 static void uart_init(void);
 
+static bool IRAM_ATTR timer_one_byte_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
+{
+    BaseType_t high_task_awoken = pdFALSE;
+    // stop timer immediately
+    gptimer_stop(timer);
+
+    gpio_set_level(Error1, !gpio_get_level(Error1));
+
+    uart_write_bytes(SLAVE_UART_PORT, char_buf, bytes_to_send_in_cb);
+    if (flag_set_relay) {
+        set_relay();
+        flag_set_relay = 0;
+    }
+    
+    // return whether we need to yield at the end of ISR
+    return (high_task_awoken == pdTRUE);
+}
+
+// първоначална инициализация
 static void init_fun(void)
 {
+    ESP_LOGI(TAG, "Create timer handle");
+    
+    gptimer_config_t timer_config = {
+        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+        .direction = GPTIMER_COUNT_UP,
+        .resolution_hz = BAUD_RATE,
+    };
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &timer_one_byte));
+
+    gptimer_event_callbacks_t cbs = {
+        .on_alarm = timer_one_byte_on_alarm_cb,
+    };
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(timer_one_byte, &cbs, NULL));
+
+    ESP_LOGI(TAG, "Enable timer");
+    ESP_ERROR_CHECK(gptimer_enable(timer_one_byte));
+
+    ESP_LOGI(TAG, "Start timer, stop it at alarm event");
+    gptimer_alarm_config_t alarm_one_byte = {
+        .alarm_count = 10, // 1stat + 8data + 1stop bits
+    };
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer_one_byte, &alarm_one_byte));
+
     uart_init();
 
     reset_relay();
@@ -154,7 +205,7 @@ static void init_fun(void)
 
     PIS = 0;        // !!! настройват се с джъмпери
 
-    PIS |= 0x20;    // !!! за тестове без пауза с един ненужен 0xff за забавяне на данните
+    // PIS |= 0x20;    // !!! за тестове без пауза за забавяне на данните махнете закоментаряването
 
 #if BAUD_RATE == 115200
     PIS |= 0x02;
@@ -221,15 +272,18 @@ static void ack_relay(void) // извежда ACK,NACK за релейните �
     };
 }
 
-static void put_inp(void) // извежда  цифровите входове през протокола
+// извежда  цифровите входове през UART
+static void put_inp(void)
 {
     if (cou == cou_broj) {
         out_buf(INP_COU * 2);
     }
 }
 
-static void read_byte(uint8_t c) // за четене данни от протокола,вика се от interrupt // реализация в AVR
-{                      // да не се подават грешни данни или 0xff
+// за четене данни от протокола,вика се от interrupt // реализация в AVR
+// да не се подават грешни данни или 0xff
+static void read_byte(uint8_t c)
+{
     if (c == NAK) { // за NAK
         if (position == OUT_AKNOLICH) { // NAK за релаета
             crc = NAK;
@@ -316,7 +370,7 @@ static void read_byte(uint8_t c) // за четене данни от прото
                         flag_first = 1;
                         char_buf[0] = NAK;
                         out_buf(1);
-                        ESP_LOGE(TAG, "INP ERR 0x%02X != 0x%02X", crc, buf_crc);
+                        ESP_LOGE(TAG, "INP ERR crc 0x%02X != 0x%02X", crc, buf_crc);
                     } else {
                         ESP_LOGD(TAG, "INP OK");
                     }
@@ -411,12 +465,19 @@ static void uart_event_task(void *pvParameters)
     for (;;) {
         //Waiting for UART event.
         if (xQueueReceive(uart0_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
+
+            gpio_set_level(EventTogle, !gpio_get_level(EventTogle));
+            if (event.timeout_flag)
+                gpio_set_level(Error1, !gpio_get_level(Error1));
+
             switch (event.type) {
             case UART_DATA:
                 uart_read_bytes(SLAVE_UART_PORT, dtmp, event.size, portMAX_DELAY);
-                for(int i = 0; i < event.size; i++)
+                for(int i = 0; i < event.size; i++) {
+                    // gpio_set_level(Error1, !gpio_get_level(Error1));
                     if (dtmp[i] != 0xff)
                         read_byte(dtmp[i]);
+                }
                 break;
             //Event of HW FIFO overflow detected
             case UART_FIFO_OVF:
@@ -486,22 +547,5 @@ static void uart_init(void)
     //Create a task to handler UART event from ISR
     xTaskCreate(uart_event_task, "uart_event_task", 2 * 4096, NULL, 11, NULL);
 
-    uart_intr_config_t uart_intr = {
-        .intr_enable_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_TXFIFO_EMPTY,
-        .rxfifo_full_thresh = 1,
-        .rx_timeout_thresh = 1,
-        .txfifo_empty_intr_thresh = 1,
-    };
-    ESP_ERROR_CHECK(uart_intr_config(SLAVE_UART_PORT, &uart_intr));
-
-    // Enable UART RX FIFO full threshold and timeout interrupts
-    // ESP_ERROR_CHECK(uart_enable_rx_intr(SLAVE_UART_PORT));
-
-    // ESP_ERROR_CHECK(uart_enable_tx_intr(SLAVE_UART_PORT, 1, 1));
-
-    // ESP_ERROR_CHECK(uart_enable_intr_mask(SLAVE_UART_PORT, UART_INTR_TX_DONE | 
-    //     UART_INTR_TXFIFO_EMPTY |
-    //     UART_INTR_RXFIFO_TOUT));
-
-    // uart_set_always_rx_timeout(SLAVE_UART_PORT, true);
+    ESP_ERROR_CHECK(uart_set_rx_full_threshold(SLAVE_UART_PORT, 1));
 }
