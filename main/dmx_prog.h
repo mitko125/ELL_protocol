@@ -8,19 +8,19 @@
 
 #include <stdlib.h>
 
-// инициализира протокола
+// инициализира протокола и го стартира
 void dmx_init(uint32_t boude);
 
 /*стартира ладера и протокола вика се от птекъсването за LCD, на 10ms при 115200 или 100ms при 9600
 void start_lader(void);	
-но вече за нея има грижата dmx_init(..  */
+но в ESP32 вече за нея има грижата dmx_init(..  */
 
 /*чрез следващите променливи можем да следим за грешки в протокола,
-за пример виж uint8_t KEY(void) в EDITOR.C	*/
+за пример виж uint8_t KEY(void); в EDITOR.C	*/
 extern uint8_t err_prot_in_start;	/*грешката в протокола е при стартирането му*/
 extern uint8_t f_err_inputs;	/*флаг за грешка във входовете	*/
-extern uint8_t disp_err_inputs;	/*вида на грешката		*/
 extern uint8_t f_err_outputs;	/*флаг за грешка в изходите	*/
+extern uint8_t disp_err_inputs;	/*вида на грешката		*/
 extern uint8_t disp_err_outputs;	/*вида на грешката		*/
 extern uint8_t disp_err_cou_inputs; /*при коя осмица е настъпила грешката   */
 extern uint8_t disp_err_cou_outputs; /*при коя осмица е настъпила грешката   */

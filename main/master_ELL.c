@@ -43,8 +43,8 @@ static const char *TAG = "ELL_master";
 #endif // LEFT_UART
 #define BUF_SIZE        (128)
 
-#define TIMER_BYTE_LENGHT 10    // 1stat + 8data + 1stop bits
-#define ADDITIONAL_WAIT 4
+#define TIMER_BYTE_LENGHT 10    // uart: 1stat + 8data + 1stop bits
+#define ADDITIONAL_WAIT 4       // допълнително изчакване за таймера
 
 #define COMAND_HIGH 0x00
 #define COMAND_OUT 0x04
@@ -82,6 +82,7 @@ static uint8_t f_start_time_out;
 static uint8_t int_err_rs485;
 static uint8_t not_clr_err_prot_in_start;
 
+// стартира обмена на изходите по протокола
 static void to_start_outputs(void);
 typedef enum
 {
@@ -98,8 +99,18 @@ static volatile POSITION position;
 static uint8_t char_bufer[100];
 static uint8_t crc, cou;
 
+// таймер за изчакване
 static gptimer_handle_t timer_n_bytes = NULL;
 
+/**
+ * @brief Изпращане по uart на даниите в char_bufer (стринг завършващ с 0)
+ *
+ * @note Използва таймера timer_n_bytes за изчакване
+ *
+ * @param[in] expected_bytes Колко байта очакваме в отговора
+ * @param[in] wait_to_error_bytes След колко байта време да очакваме гршка или timeout
+ * @return Няма
+ */
 static void out_bufer(uint8_t expected_bytes, int wait_to_error_bytes)
 {
     if (wait_to_error_bytes) {
@@ -113,6 +124,7 @@ static void out_bufer(uint8_t expected_bytes, int wait_to_error_bytes)
     uart_write_bytes(MASTER_UART_PORT, char_bufer, strlen((char *)char_bufer));
 }
 
+// стартира обмена на входове по протокола
 static void start_input(void)
 {
     if (def_spi) {
@@ -136,6 +148,7 @@ static void start_input(void)
     }
 }
 
+// обмена на изходите по протокола
 static void start_outputs(void)
 {
     not_clr_err_prot_in_start = 0;
@@ -158,6 +171,7 @@ static void start_outputs(void)
     }
 }
 
+// задава timeout на изходите по протокола
 static void send_time_out(void)
 {
     not_clr_err_prot_in_start = 1;
@@ -174,6 +188,7 @@ static void send_time_out(void)
         f_start_time_out = 0;
 }
 
+// стартира обмена на изходите по протокола
 static void to_start_outputs(void)
 {
     if (cou_out) {
@@ -184,6 +199,8 @@ static void to_start_outputs(void)
     }
 }
 
+/*стартира ладера и протокола вика се от птекъсването за LCD, на 10ms при 115200 или 100ms при 9600
+но в ESP32 вече за нея има грижата dmx_init(..  */
 static void start_lader(void)
 {
     if (flag_overlay_lader == 0) { // if(cou_inp){
@@ -250,6 +267,7 @@ static void start_lader(void)
     }
 }
 
+// прекъсване на таймер за изчакване
 static bool IRAM_ATTR timer_n_bytes_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_awoken = pdFALSE;
@@ -291,7 +309,7 @@ static bool IRAM_ATTR timer_n_bytes_on_alarm_cb(gptimer_handle_t timer, const gp
 
 static QueueHandle_t uart0_queue;
 static uint8_t dtmp[BUF_SIZE];
-
+// прихващане прекъсванията но uart чрез събития
 static void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
@@ -414,6 +432,7 @@ static void uart_event_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+// занимава се със извикването на start_lader();
 static void master_task(void * arg)
 {
     TickType_t xLastWakeTime;

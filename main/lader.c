@@ -8,9 +8,7 @@ void my_lader_setings(void);
 
 uint8_t input_mem[0x20];
 uint8_t output_mem[0x20];
-// uint8_t ;//no_bacup_mem
 uint8_t relay[0x20];
-// bacup_mem
 uint8_t timer[0x10];
 uint8_t counter[0x10];
 

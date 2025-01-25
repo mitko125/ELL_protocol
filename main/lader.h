@@ -20,21 +20,25 @@ extern uint8_t def_inp;
 extern uint8_t def_out;
 // време за нулиране на изходите след отпадене на протокола в mS
 extern uint8_t time_out;
-// колко грешки са допустими в протокола преди аларма
+// колко грешки са допустими в протокола преди аларма (обиновено: развой = 1, на обекти = 3)
 extern uint8_t cou_err_485;
-// колоко осмици вход/изхода има по SPI, остатъци от AVR в ESP32 ако има нужда ще се премине на I2C
+// колоко осмици вход/изхода има по SPI, остатъци от AVR ако има нужда  в ESP32 ще се премине на I2C
 extern uint8_t def_spi,type_spi;
 // на колко по 10ms да се пуска ладера minimum 1
 extern uint8_t data_wait_to_lader_mul_10ms;
 
 // памет за осмици входове по протокола
 extern uint8_t input_mem[];
+
 // памет за осмици изходи по протокола
 extern uint8_t output_mem[];
+
 // памет за осмици релета
-extern uint8_t relay[];  
+extern uint8_t relay[];
+
 // памет за таймери
 extern uint8_t timer[];
+
 // памет за броячи
 extern uint8_t counter[];
 

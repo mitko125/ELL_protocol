@@ -25,6 +25,7 @@ extern void master_task(void *arg);
 
 void app_main(void)
 {
+    // за тестове със сигнал анализатор 
     gpio_config_t gpio_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT_OUTPUT,
@@ -83,6 +84,7 @@ void app_main(void)
             vTaskDelay(1);
             xLastWakeTime = xTaskGetTickCount();
         } else {    // за симулиране на контролер с LCD индикатор и ладер програма това е в работен цикъл
+                    // подобно на uint8_t KEY(void); в EDITOR.C
             if (flag_overlay_lader) {
                 printf("OVERLAY LADER");
                 bat_rs485 = 1;
@@ -119,7 +121,7 @@ void app_main(void)
     }
 }
 
-// демо настройи на ладер
+// демо настройки на ладер
 void my_lader_setings(void)
 {
     def_inp = 16; // брой осмици входове по протокола
@@ -152,7 +154,7 @@ void my_lader(void)
         // SET(R_FIRST_CYCLE);
 
         static int cou = 0;
-        if (++cou == 10 * 100) {    // на 10 секунди нови изходи
+        if (++cou == 10 * 100) {    // за демо на 10 секунди нови изходи
             cou = 0;
             output_mem[0] = input_mem[0];
         }
