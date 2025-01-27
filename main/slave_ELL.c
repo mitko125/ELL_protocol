@@ -103,7 +103,7 @@ static void out_buf(uint8_t bytes_to_send)
             // забавяне с един байт на данните
             bytes_to_send_in_cb = bytes_to_send;
             ESP_ERROR_CHECK(gptimer_set_raw_count(timer_one_byte, 0));
-            ESP_ERROR_CHECK(gptimer_start(timer_one_byte));
+            gptimer_start(timer_one_byte);
         }
     } else {
 first:
@@ -140,9 +140,6 @@ static void read_inputs(void)
     }
 }
 
-// инициализизиране на UART
-static void uart_init(void);
-
 static bool IRAM_ATTR timer_one_byte_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_awoken = pdFALSE;
@@ -158,6 +155,9 @@ static bool IRAM_ATTR timer_one_byte_on_alarm_cb(gptimer_handle_t timer, const g
     // return whether we need to yield at the end of ISR
     return (high_task_awoken == pdTRUE);
 }
+
+// инициализизиране на UART
+static void uart_init(void);
 
 // първоначална инициализация
 static void init_fun(void)
@@ -183,8 +183,6 @@ static void init_fun(void)
         .alarm_count = 10, // 1stat + 8data + 1stop bits
     };
     ESP_ERROR_CHECK(gptimer_set_alarm_action(timer_one_byte, &alarm_one_byte));
-
-    uart_init();
 
     reset_relay();
 
@@ -230,6 +228,8 @@ static void init_fun(void)
         data_time_wait_inp = 10; // 10ms
     time_wait_inp = data_time_wait_inp;
     ack_bufer = ACK_HIGH | 0x02;
+
+    uart_init();
 }
 
 static void ack_relay(void) // извежда ACK,NACK за релейните изходи по протокола
@@ -402,7 +402,7 @@ void slave_main(void *arg)
         
         // вместо реализация в AVR прекъсване на 1mS
         uint32_t new_time = esp_log_timestamp();
-        for (int i = new_time - old_time; i; i--) {
+        for (int i = (new_time - old_time) > 10 ? 10 : new_time - old_time; i; i--) {
             if (time_wait)
                 time_wait--;
             if (data_time_wait_inp) {
@@ -437,6 +437,7 @@ void slave_main(void *arg)
                 ESP_LOGE(TAG, "reset_relay");
             }
             time_wait = data_time_wait;
+            old_time = esp_log_timestamp();
         }
 #else
         ;
@@ -537,7 +538,7 @@ static void uart_init(void)
     uart_pattern_queue_reset(SLAVE_UART_PORT, 20);
 
     //Create a task to handler UART event from ISR
-    xTaskCreate(uart_event_task, "uart_event_task", 2 * 4096, NULL, 11, NULL);
+    xTaskCreatePinnedToCore(uart_event_task, "uart_event_task", 2 * 4096, NULL, configMAX_PRIORITIES - 1, NULL, 1);
 
     ESP_ERROR_CHECK(uart_set_rx_full_threshold(SLAVE_UART_PORT, 1));
 }

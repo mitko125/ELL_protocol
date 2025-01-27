@@ -26,6 +26,7 @@ extern uint8_t disp_err_cou_inputs; /*при коя осмица е настъп
 extern uint8_t disp_err_cou_outputs; /*при коя осмица е настъпила грешката   */
 extern uint8_t cou_inp,cou_out; //брой входове и изходи 
 extern uint8_t flag_overlay_lader;  /*ладера се е препокрил	*/
+extern uint32_t errors_in_inputs, errors_in_outputs; //общо количество на грешките в вх/изх.
 
 // остатъци от AVR при нужда от повече вх/изх. по протокола взимахме от SPI
 #ifdef LONG_DMX

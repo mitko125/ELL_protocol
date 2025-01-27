@@ -6,11 +6,13 @@
 uint8_t def_inp, def_out, time_out, cou_err_485, def_spi, type_spi, data_wait_to_lader_mul_10ms;
 void my_lader_setings(void);
 
-uint8_t input_mem[0x20];
-uint8_t output_mem[0x20];
-uint8_t relay[0x20];
-uint8_t timer[0x10];
+// ESP32 ги подрежда наопаки в линкера. А някои стари мои пограми разчитат в паметта:
+// първо input_mem[], после output_mem[] и накрая relay[]
 uint8_t counter[0x10];
+uint8_t timer[0x10];
+uint8_t relay[0x20];
+uint8_t output_mem[0x20];
+uint8_t input_mem[0x20];
 
 void init_lader_mem(void)
 {

@@ -17,6 +17,8 @@
 #include "dmx_prog.h"
 #include "lader.h"
 
+static const char *TAG = "main";
+
 // за симулиране на контролер с LCD индикатор и ладер програма
 char enable_lader, bat_rs485, fl_disp, str[30];
 
@@ -25,13 +27,21 @@ extern void master_task(void *arg);
 
 void app_main(void)
 {
-    // за тестове със сигнал анализатор 
+    // за тестове със сигнал анализатор
     gpio_config_t gpio_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pin_bit_mask = ((1ULL << Start1Ok0) | (1ULL << EventTogle) | (1ULL << FreeTogle) | (1ULL << Error1)),
+        .pin_bit_mask = ((1ULL << Start1Ok0) | (1ULL << EventTogle) | (1ULL << TimerTogle) | (1ULL << Error1)),
     };
     ESP_ERROR_CHECK(gpio_config(&gpio_conf));
+    // бутон
+    gpio_config_t gpio_conf1 = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = true,
+        .pin_bit_mask = 1ULL << CONFIG_BUTTON_GPIO,
+    };
+    ESP_ERROR_CHECK(gpio_config(&gpio_conf1));
 
     xTaskCreate(slave_main, "slave_main", 2 * 4096, NULL, 4, NULL);
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -41,35 +51,39 @@ void app_main(void)
 
     {   // за симулиране на контролер с LCD индикатор и ладер програма това е при стартиране
         bat_rs485 = 1;
-        if (def_inp || def_out) {
+        if (def_inp) {
             fl_disp = 1;
-            printf("Start RS485\n");
-            strcpy(str, "I:    O: ");
+            ESP_LOGI(TAG, "Start RS485");
+            strcpy(str, "\2I:    O: ");
             while (err_prot_in_start) {
                 if (flag_overlay_lader) {
-                    printf("OVERLAY LADER");
+                    ESP_LOGE(TAG, "OVERLAY LADER");
                     bat_rs485 = 1;
-                    while (1) {
+                    while (1)
                         vTaskDelay(pdMS_TO_TICKS(50));
-                    }
                 }
                 if (getchar() > 0) {
-                    strcpy(str, "I:    O: ");
+                    strcpy(str, "\2I:    O: ");
+                    disp_err_inputs = disp_err_outputs = 0;
                 }
+                bool fl_new_error = false;
                 if (disp_err_inputs && (disp_err_inputs != 1)) {
-                    sprintf(str + 2, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
-                    str[5] = ' ';
+                    sprintf(str + 3, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
+                    str[6] = ' ';
                     disp_err_inputs = 1;
+                    fl_new_error = true;
                 }
                 if (disp_err_outputs && (disp_err_outputs != 1)) {
-                    sprintf(str + 8, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
+                    sprintf(str + 9, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
                     disp_err_outputs = 1;
+                    fl_new_error = true;
                 }
-                printf("%s\n", str);
+                if (fl_new_error)
+                    ESP_LOGW(TAG, "%s", str + 1);
                 vTaskDelay(pdMS_TO_TICKS(10));
             }
             disp_err_inputs = disp_err_outputs = 0;
-            printf("RS485 Started\n");
+            ESP_LOGI(TAG, "RS485 Started");
             fl_disp = 0;
         } else
             disp_err_inputs = disp_err_outputs = 0;
@@ -79,39 +93,55 @@ void app_main(void)
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
     while (1) {
-        gpio_set_level(FreeTogle, !gpio_get_level(FreeTogle));
+        // гледаше кога е свободен процесора
+        // gpio_set_level(TimerTogle, !gpio_get_level(TimerTogle));
+        
         if (xTaskGetTickCount() > (xLastWakeTime + 3)) {
             vTaskDelay(1);
             xLastWakeTime = xTaskGetTickCount();
-        } else {    // за симулиране на контролер с LCD индикатор и ладер програма това е в работен цикъл
-                    // подобно на uint8_t KEY(void); в EDITOR.C
+        } else {  
+
+            if (1) {    //за грешки в протокола на ELL
+                static uint32_t old_errors_in_inputs, old_errors_in_outputs;
+                if ((getchar() > 0) || (old_errors_in_inputs != errors_in_inputs) || (old_errors_in_outputs != errors_in_outputs))
+                    ESP_LOGW(TAG, "ELL protocol errors inp = %lu out = %lu", 
+                        old_errors_in_inputs = errors_in_inputs, old_errors_in_outputs = errors_in_outputs);
+                if ( !gpio_get_level(CONFIG_BUTTON_GPIO) )
+                    errors_in_inputs = errors_in_outputs = 0;
+            }
+
+            // за симулиране на контролер с LCD индикатор и ладер програма това е в работен цикъл
+            // подобно на uint8_t KEY(void); в EDITOR.C
             if (flag_overlay_lader) {
-                printf("OVERLAY LADER");
+                ESP_LOGE(TAG,"OVERLAY LADER");
                 bat_rs485 = 1;
                 while (1) {
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
             }
             if (disp_err_inputs || disp_err_outputs) {
+                char str[30];
                 bat_rs485 = 1;
-                printf("ERROR RS485\n");
-                strcpy(str, "I:    O: ");
+                ESP_LOGE(TAG, "ERR RS485");
+                strcpy(str, "\2I:    O: ");
 
                 while (1) {
-                    if (getchar() > 0) {
-                        printf("End error RS485\n");
+                    if (getchar() > 0)
                         break;
-                    }
+                    bool fl_new_error = false;
                     if (disp_err_inputs && (disp_err_inputs != 1)) {
-                        sprintf(str + 2, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
-                        str[5] = ' ';
+                        sprintf(str + 3, "%c%.2d", disp_err_inputs, disp_err_cou_inputs);
+                        str[6] = ' ';
                         disp_err_inputs = 1;
+                        fl_new_error = true;
                     }
                     if (disp_err_outputs && (disp_err_outputs != 1)) {
-                        sprintf(str + 8, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
+                        sprintf(str + 9, "%c%.2d", disp_err_outputs, disp_err_cou_outputs);
                         disp_err_outputs = 1;
+                        fl_new_error = true;
                     }
-                    printf("%s\n", str);
+                    if (fl_new_error)
+                        ESP_LOGE(TAG, "%s", str + 1);
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
                 disp_err_outputs = disp_err_inputs = 0;
@@ -132,7 +162,7 @@ void my_lader_setings(void)
     cou_err_485 = 1;//3;                 // колко грешки са допустими в протокола преди аларма
     def_spi = 0;                     // колоко осмици вход/изхода има по SPI
     type_spi = 1;                    //
-    data_wait_to_lader_mul_10ms = 1; // на колко по 10ms да се пуска ладера minimum 1
+    data_wait_to_lader_mul_10ms = 2; // на колко по 10ms да се пуска ладера minimum 1
 }
 
 // демо ладер
